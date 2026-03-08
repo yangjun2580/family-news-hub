@@ -1,0 +1,148 @@
+{
+  "name": "WF-06: 유가 수집 (오피넷)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-fuel",
+      "name": "매일 10시",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://www.opinet.co.kr/api/avgAllPrice.do",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "code",
+              "value": "={{ $env.OPINET_API_KEY }}"
+            },
+            {
+              "name": "out",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-opinet-all",
+      "name": "오피넷 전국 평균가",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 220]
+    },
+    {
+      "parameters": {
+        "url": "http://www.opinet.co.kr/api/avgSidoPrice.do",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "code",
+              "value": "={{ $env.OPINET_API_KEY }}"
+            },
+            {
+              "name": "out",
+              "value": "json"
+            },
+            {
+              "name": "sidoCode",
+              "value": "06"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-opinet-sido",
+      "name": "오피넷 경기도 평균가",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── 오피넷 전국 평균 파싱 ─────────────────────────────────\nconst allData = $('오피넷 전국 평균가').item.json;\nconst sidoData = $('오피넷 경기도 평균가').item.json;\n\n// 오피넷 응답 구조: { RESULT: { OIL: [ {PRODCD, PRODNM, PRICE, DIFF} ] } }\nfunction parseOilData(data) {\n  const oils = data?.RESULT?.OIL || [];\n  const map = {};\n  for (const oil of oils) {\n    map[oil.PRODCD] = {\n      price: Math.round(parseFloat(oil.PRICE) || 0),\n      diff:  Math.round(parseFloat(oil.DIFF) || 0)\n    };\n  }\n  return map;\n}\n\n// 유종 코드\n// B027: 휘발유, D047: 경유, K015: LPG\nconst allMap = parseOilData(allData);\nconst sidoMap = parseOilData(sidoData);\n\n// 전국 평균\nconst national = {\n  region:       '전국평균',\n  gasoline:     allMap['B027']?.price || null,\n  diesel:       allMap['D047']?.price || null,\n  lpg:          allMap['K015']?.price || null,\n  gasoline_chg: allMap['B027']?.diff  || 0,\n  diesel_chg:   allMap['D047']?.diff  || 0,\n  lpg_chg:      allMap['K015']?.diff  || 0,\n  fetched_at:   new Date().toISOString()\n};\n\n// 경기도 평균\nconst gyeonggi = {\n  region:       '경기도',\n  gasoline:     sidoMap['B027']?.price || null,\n  diesel:       sidoMap['D047']?.price || null,\n  lpg:          sidoMap['K015']?.price || null,\n  gasoline_chg: sidoMap['B027']?.diff  || 0,\n  diesel_chg:   sidoMap['D047']?.diff  || 0,\n  lpg_chg:      sidoMap['K015']?.diff  || 0,\n  fetched_at:   new Date().toISOString()\n};\n\nconsole.log('전국 유가:', JSON.stringify(national));\nconsole.log('경기도 유가:', JSON.stringify(gyeonggi));\n\nreturn [\n  { json: national },\n  { json: gyeonggi }\n];"
+      },
+      "id": "code-parse-fuel",
+      "name": "유가 데이터 파싱",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "fuel_cache",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "region":       "={{ $json.region }}",
+            "gasoline":     "={{ $json.gasoline }}",
+            "diesel":       "={{ $json.diesel }}",
+            "lpg":          "={{ $json.lpg }}",
+            "gasoline_chg": "={{ $json.gasoline_chg }}",
+            "diesel_chg":   "={{ $json.diesel_chg }}",
+            "lpg_chg":      "={{ $json.lpg_chg }}",
+            "fetched_at":   "={{ $json.fetched_at }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "supabase-insert-fuel",
+      "name": "Supabase INSERT (fuel_cache)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [920, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "매일 10시": {
+      "main": [
+        [
+          { "node": "오피넷 전국 평균가", "type": "main", "index": 0 },
+          { "node": "오피넷 경기도 평균가", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "오피넷 전국 평균가": {
+      "main": [[{ "node": "유가 데이터 파싱", "type": "main", "index": 0 }]]
+    },
+    "오피넷 경기도 평균가": {
+      "main": [[{ "node": "유가 데이터 파싱", "type": "main", "index": 1 }]]
+    },
+    "유가 데이터 파싱": {
+      "main": [[{ "node": "Supabase INSERT (fuel_cache)", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": ["phase1", "fuel"]
+}

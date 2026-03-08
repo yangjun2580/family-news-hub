@@ -1,0 +1,200 @@
+{
+  "name": "WF-04: 날씨 수집 (기상청 초단기실황)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "cron-weather",
+      "name": "1시간 간격",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "serviceKey",
+              "value": "={{ $env.WEATHER_API_KEY }}"
+            },
+            {
+              "name": "pageNo",
+              "value": "1"
+            },
+            {
+              "name": "numOfRows",
+              "value": "10"
+            },
+            {
+              "name": "dataType",
+              "value": "JSON"
+            },
+            {
+              "name": "base_date",
+              "value": "={{ $now.format('yyyyMMdd') }}"
+            },
+            {
+              "name": "base_time",
+              "value": "={{ $now.minus(1, 'hour').format('HH') + '00' }}"
+            },
+            {
+              "name": "nx",
+              "value": "60"
+            },
+            {
+              "name": "ny",
+              "value": "125"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-weather-ncst",
+      "name": "기상청 초단기실황",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtFcst",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "serviceKey",
+              "value": "={{ $env.WEATHER_API_KEY }}"
+            },
+            {
+              "name": "pageNo",
+              "value": "1"
+            },
+            {
+              "name": "numOfRows",
+              "value": "60"
+            },
+            {
+              "name": "dataType",
+              "value": "JSON"
+            },
+            {
+              "name": "base_date",
+              "value": "={{ $now.format('yyyyMMdd') }}"
+            },
+            {
+              "name": "base_time",
+              "value": "={{ $now.minus(1, 'hour').format('HH') + '30' }}"
+            },
+            {
+              "name": "nx",
+              "value": "60"
+            },
+            {
+              "name": "ny",
+              "value": "125"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-weather-fcst",
+      "name": "기상청 초단기예보",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── 초단기실황 파싱 ──────────────────────────────────\nconst ncstItems = $('기상청 초단기실황').item.json?.response?.body?.items?.item || [];\nconst fcstItems = $('기상청 초단기예보').item.json?.response?.body?.items?.item || [];\n\n// 실황 데이터 맵핑\nconst ncstMap = {};\nfor (const item of ncstItems) {\n  ncstMap[item.category] = item.obsrValue;\n}\n\n// 예보 데이터에서 최고/최저 기온 추출 (오늘 범위)\nconst temps = fcstItems\n  .filter(i => i.category === 'T1H')\n  .map(i => parseFloat(i.fcstValue))\n  .filter(v => !isNaN(v));\n\nconst tempHigh = temps.length > 0 ? Math.max(...temps) : null;\nconst tempLow  = temps.length > 0 ? Math.min(...temps) : null;\n\n// POP(강수확률) 최대값\nconst pops = fcstItems\n  .filter(i => i.category === 'POP')\n  .map(i => parseInt(i.fcstValue, 10))\n  .filter(v => !isNaN(v));\nconst pop = pops.length > 0 ? Math.max(...pops) : 0;\n\n// SKY 코드 → 텍스트\nfunction skyText(code) {\n  const map = { '1': '맑음', '3': '구름많음', '4': '흐림' };\n  return map[code] || '알수없음';\n}\n\n// PTY 코드 → 텍스트\nfunction ptyText(code) {\n  const map = { '0': '없음', '1': '비', '2': '비/눈', '3': '눈', '4': '소나기' };\n  return map[code] || '없음';\n}\n\n// 풍향(VEC) → 한국어 방위\nfunction vecToDir(vec) {\n  const dirs = ['북','북북동','북동','동북동','동','동남동','남동','남남동',\n                 '남','남남서','남서','서남서','서','서북서','북서','북북서'];\n  const idx = Math.round((parseFloat(vec) + 11.25) / 22.5) % 16;\n  return dirs[idx] || '알수없음';\n}\n\n// 현재 SKY (fcst에서 가장 가까운 시간)\nconst skyItem = fcstItems.find(i => i.category === 'SKY');\nconst skyCode = skyItem?.fcstValue || ncstMap['SKY'] || '1';\n\nconst weather = {\n  station:    '이천시 부발읍',\n  nx:         60,\n  ny:         125,\n  temp:       parseFloat(ncstMap['T1H']) || null,\n  temp_high:  tempHigh,\n  temp_low:   tempLow,\n  sky:        skyText(skyCode),\n  humidity:   parseInt(ncstMap['REH'], 10) || null,\n  wind_dir:   vecToDir(ncstMap['VEC']),\n  wind_speed: parseFloat(ncstMap['WSD']) || null,\n  pop:        pop,\n  pty:        ptyText(ncstMap['PTY'] || '0'),\n  rain_1h:    parseFloat(ncstMap['RN1']) || 0,\n  fetched_at: new Date().toISOString()\n};\n\nconsole.log('날씨 파싱 완료:', JSON.stringify(weather));\nreturn { json: weather };"
+      },
+      "id": "code-parse-weather",
+      "name": "날씨 데이터 파싱",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 380]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "weather_cache",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "station":    "={{ $json.station }}",
+            "nx":         "={{ $json.nx }}",
+            "ny":         "={{ $json.ny }}",
+            "temp":       "={{ $json.temp }}",
+            "temp_high":  "={{ $json.temp_high }}",
+            "temp_low":   "={{ $json.temp_low }}",
+            "sky":        "={{ $json.sky }}",
+            "humidity":   "={{ $json.humidity }}",
+            "wind_dir":   "={{ $json.wind_dir }}",
+            "wind_speed": "={{ $json.wind_speed }}",
+            "pop":        "={{ $json.pop }}",
+            "pty":        "={{ $json.pty }}",
+            "rain_1h":    "={{ $json.rain_1h }}",
+            "fetched_at": "={{ $json.fetched_at }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "supabase-insert-weather",
+      "name": "Supabase INSERT (weather_cache)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [920, 380],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "1시간 간격": {
+      "main": [
+        [
+          { "node": "기상청 초단기실황", "type": "main", "index": 0 },
+          { "node": "기상청 초단기예보", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "기상청 초단기실황": {
+      "main": [[{ "node": "날씨 데이터 파싱", "type": "main", "index": 0 }]]
+    },
+    "기상청 초단기예보": {
+      "main": [[{ "node": "날씨 데이터 파싱", "type": "main", "index": 1 }]]
+    },
+    "날씨 데이터 파싱": {
+      "main": [[{ "node": "Supabase INSERT (weather_cache)", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": ["phase1", "weather"]
+}

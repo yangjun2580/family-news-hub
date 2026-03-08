@@ -1,0 +1,128 @@
+{
+  "name": "WF-05: 미세먼지 수집 (에어코리아)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "cron-dust",
+      "name": "1시간 간격",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "serviceKey",
+              "value": "={{ $env.AIRKOREA_API_KEY }}"
+            },
+            {
+              "name": "returnType",
+              "value": "json"
+            },
+            {
+              "name": "numOfRows",
+              "value": "1"
+            },
+            {
+              "name": "pageNo",
+              "value": "1"
+            },
+            {
+              "name": "stationName",
+              "value": "이천"
+            },
+            {
+              "name": "dataTerm",
+              "value": "DAILY"
+            },
+            {
+              "name": "ver",
+              "value": "1.3"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-airkorea",
+      "name": "에어코리아 측정소 실시간",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── 에어코리아 미세먼지 파싱 ─────────────────────────────\nconst body = $input.item.json?.response?.body;\nconst items = body?.items;\n\nif (!items || items.length === 0) {\n  throw new Error('에어코리아 응답 없음: ' + JSON.stringify($input.item.json));\n}\n\nconst latest = items[0];\n\n// '-' 값 처리 (측정불가)\nfunction safeInt(val) {\n  const n = parseInt(val, 10);\n  return isNaN(n) ? null : n;\n}\n\nconst dust = {\n  station:    latest.stationName || '이천',\n  pm10:       safeInt(latest.pm10Value),   // 미세먼지 μg/m³\n  pm25:       safeInt(latest.pm25Value),   // 초미세먼지 μg/m³\n  fetched_at: new Date().toISOString()\n};\n\nconsole.log('미세먼지 파싱 완료:', JSON.stringify(dust));\n\n// 등급 로그 (참고용 — 실제 등급 판정은 프론트에서)\n// PM10: 0-15 매우좋음 / 16-30 좋음 / 31-40 보통(상) / 41-50 보통(하) / 51-75 나쁨(상) / 76-100 나쁨(하) / 101-150 매우나쁨 / 151+ 최악\nif (dust.pm10 !== null) {\n  console.log(`PM10: ${dust.pm10} μg/m³`);\n}\nif (dust.pm25 !== null) {\n  console.log(`PM2.5: ${dust.pm25} μg/m³`);\n}\n\nreturn { json: dust };"
+      },
+      "id": "code-parse-dust",
+      "name": "미세먼지 데이터 파싱",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "dust_cache",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "station":    "={{ $json.station }}",
+            "pm10":       "={{ $json.pm10 }}",
+            "pm25":       "={{ $json.pm25 }}",
+            "fetched_at": "={{ $json.fetched_at }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "supabase-insert-dust",
+      "name": "Supabase INSERT (dust_cache)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [900, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "1시간 간격": {
+      "main": [[{ "node": "에어코리아 측정소 실시간", "type": "main", "index": 0 }]]
+    },
+    "에어코리아 측정소 실시간": {
+      "main": [[{ "node": "미세먼지 데이터 파싱", "type": "main", "index": 0 }]]
+    },
+    "미세먼지 데이터 파싱": {
+      "main": [[{ "node": "Supabase INSERT (dust_cache)", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": ["phase1", "dust"]
+}

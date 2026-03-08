@@ -1,0 +1,79 @@
+{
+  "name": "WF-05 미세먼지수집 (에어코리아)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 1 }] }
+      },
+      "id": "cron-dust",
+      "name": "1시간마다 실행",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [240, 300],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "url": "http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "serviceKey",  "value": "={{ $env.AIRKOREA_API_KEY }}" },
+            { "name": "returnType",  "value": "json" },
+            { "name": "numOfRows",   "value": "1" },
+            { "name": "pageNo",      "value": "1" },
+            { "name": "stationName", "value": "이천" },
+            { "name": "dataTerm",    "value": "DAILY" },
+            { "name": "ver",         "value": "1.0" }
+          ]
+        },
+        "options": { "timeout": 10000 }
+      },
+      "id": "http-dust",
+      "name": "에어코리아 측정소 API",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [440, 300],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.item.json?.response?.body?.items || [];\nconst latest = Array.isArray(items) ? items[0] : items;\n\nif (!latest) throw new Error('에어코리아 응답 없음');\n\n// '-' 값 처리 (측정 오류)\nconst pm10 = latest.pm10Value === '-' ? null : parseInt(latest.pm10Value);\nconst pm25 = latest.pm25Value === '-' ? null : parseInt(latest.pm25Value);\n\nconsole.log(`[WF-05] 미세먼지: PM10=${pm10}, PM2.5=${pm25}`);\n\nreturn [{\n  json: {\n    station:    '이천',\n    pm10:       pm10,\n    pm25:       pm25,\n    fetched_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "code-parse-dust",
+      "name": "미세먼지 데이터 파싱",
+      "type": "n8n-nodes-base.code",
+      "position": [640, 300],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "dust_cache",
+        "dataToSend": "autoMapInputData",
+        "options": {
+          "upsert": true,
+          "onConflict": "station"
+        }
+      },
+      "id": "supabase-dust",
+      "name": "Supabase dust_cache UPSERT",
+      "type": "n8n-nodes-base.supabase",
+      "position": [840, 300],
+      "typeVersion": 1,
+      "credentials": { "supabaseApi": { "name": "Supabase (Family News Hub)" } }
+    }
+  ],
+  "connections": {
+    "1시간마다 실행": {
+      "main": [[{ "node": "에어코리아 측정소 API", "type": "main", "index": 0 }]]
+    },
+    "에어코리아 측정소 API": {
+      "main": [[{ "node": "미세먼지 데이터 파싱", "type": "main", "index": 0 }]]
+    },
+    "미세먼지 데이터 파싱": {
+      "main": [[{ "node": "Supabase dust_cache UPSERT", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": ["family-news-hub", "phase1", "dust"]
+}

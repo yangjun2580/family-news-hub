@@ -1,0 +1,132 @@
+{
+  "name": "WF-06 유가수집 (오피넷)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{
+            "field": "cronExpression",
+            "expression": "0 10 * * *"
+          }]
+        }
+      },
+      "id": "cron-fuel",
+      "name": "매일 10:00 실행",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [240, 300],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "url": "http://www.opinet.co.kr/api/avgAllPrice.do",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "code",   "value": "F260226239" },
+            { "name": "out",    "value": "json" }
+          ]
+        },
+        "options": { "timeout": 10000 }
+      },
+      "id": "http-fuel-national",
+      "name": "오피넷 전국 평균가",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [440, 220],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "url": "http://www.opinet.co.kr/api/avgSidoPrice.do",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "code",   "value": "F260226239" },
+            { "name": "out",    "value": "json" },
+            { "name": "sido",   "value": "경기" }
+          ]
+        },
+        "options": { "timeout": 10000 }
+      },
+      "id": "http-fuel-gyeonggi",
+      "name": "오피넷 경기도 평균가",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [440, 400],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "fuel_cache",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "region",
+              "condition": "eq",
+              "keyValue": "전국평균"
+            }
+          ]
+        },
+        "options": {
+          "limit": 1
+        }
+      },
+      "id": "supabase-prev",
+      "name": "이전 유가 조회 (변동 계산용)",
+      "type": "n8n-nodes-base.supabase",
+      "position": [440, 600],
+      "typeVersion": 1,
+      "credentials": { "supabaseApi": { "name": "Supabase (Family News Hub)" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 전국 평균가 파싱\nconst national = $('오피넷 전국 평균가').item.json;\nconst gyeonggi = $('오피넷 경기도 평균가').item.json;\nconst prevData = $('이전 유가 조회 (변동 계산용)').all();\n\n// 오피넷 응답 구조: { OIL: [ { OIL_PRICE, PRODUCT_CD } ] }\nconst parseOil = (data) => {\n  const list = data?.OIL?.OIL_PRICE || data?.OIL || [];\n  const items = Array.isArray(list) ? list : [list];\n  const result = {};\n  for (const item of items) {\n    const cd = item.PRODUCT_CD || item.prodcd;\n    const price = parseInt(item.PRICE || item.price || 0);\n    if (cd === 'B027') result.gasoline = price; // 휘발유\n    if (cd === 'D047') result.diesel   = price; // 경유\n    if (cd === 'K015') result.lpg      = price; // LPG\n  }\n  return result;\n};\n\nconst curr = parseOil(national);\nconst prev = prevData.length > 0 ? prevData[0].json : {};\n\nconst calcChg = (key) => prev[key] ? (curr[key] || 0) - prev[key] : 0;\n\nconsole.log(`[WF-06] 유가: 휘발유=${curr.gasoline}, 경유=${curr.diesel}, LPG=${curr.lpg}`);\n\nreturn [{\n  json: {\n    diesel:       curr.diesel   || 0,\n    gasoline:     curr.gasoline || 0,\n    lpg:          curr.lpg      || 0,\n    diesel_chg:   calcChg('diesel'),\n    gasoline_chg: calcChg('gasoline'),\n    lpg_chg:      calcChg('lpg'),\n    region:       '전국평균',\n    fetched_at:   new Date().toISOString()\n  }\n}];"
+      },
+      "id": "code-parse-fuel",
+      "name": "유가 데이터 파싱 + 변동 계산",
+      "type": "n8n-nodes-base.code",
+      "position": [680, 380],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "fuel_cache",
+        "dataToSend": "autoMapInputData",
+        "options": {
+          "upsert": true,
+          "onConflict": "region"
+        }
+      },
+      "id": "supabase-fuel",
+      "name": "Supabase fuel_cache UPSERT",
+      "type": "n8n-nodes-base.supabase",
+      "position": [900, 380],
+      "typeVersion": 1,
+      "credentials": { "supabaseApi": { "name": "Supabase (Family News Hub)" } }
+    }
+  ],
+  "connections": {
+    "매일 10:00 실행": {
+      "main": [
+        [{ "node": "오피넷 전국 평균가",    "type": "main", "index": 0 }],
+        [{ "node": "오피넷 경기도 평균가",   "type": "main", "index": 0 }],
+        [{ "node": "이전 유가 조회 (변동 계산용)", "type": "main", "index": 0 }]
+      ]
+    },
+    "오피넷 전국 평균가": {
+      "main": [[{ "node": "유가 데이터 파싱 + 변동 계산", "type": "main", "index": 0 }]]
+    },
+    "오피넷 경기도 평균가": {
+      "main": [[{ "node": "유가 데이터 파싱 + 변동 계산", "type": "main", "index": 0 }]]
+    },
+    "이전 유가 조회 (변동 계산용)": {
+      "main": [[{ "node": "유가 데이터 파싱 + 변동 계산", "type": "main", "index": 0 }]]
+    },
+    "유가 데이터 파싱 + 변동 계산": {
+      "main": [[{ "node": "Supabase fuel_cache UPSERT", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": ["family-news-hub", "phase1", "fuel"]
+}

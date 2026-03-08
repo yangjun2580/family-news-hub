@@ -1,0 +1,136 @@
+{
+  "name": "WF-04 날씨수집 (기상청 초단기실황)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 1 }] }
+      },
+      "id": "cron-weather",
+      "name": "1시간마다 실행",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [240, 300],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "jsCode": "// 현재 시각 기반으로 기상청 API 파라미터 계산\nconst now = new Date();\n\n// KST 변환\nconst kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);\n\nconst yyyymmdd = kst.toISOString().slice(0, 10).replace(/-/g, '');\nlet hh = kst.getUTCHours();\nconst mm = kst.getUTCMinutes();\n\n// 초단기실황은 매시 40분에 발표 → 40분 이전이면 1시간 전 데이터 요청\nif (mm < 40) hh = hh - 1;\nif (hh < 0) hh = 23;\n\nconst baseTime = String(hh).padStart(2, '0') + '00';\n\nreturn [{\n  json: {\n    baseDate: yyyymmdd,\n    baseTime: baseTime,\n    nx: 60,\n    ny: 125\n  }\n}];"
+      },
+      "id": "code-params",
+      "name": "API 파라미터 계산",
+      "type": "n8n-nodes-base.code",
+      "position": [440, 300],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "url": "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "serviceKey", "value": "={{ $env.WEATHER_API_KEY }}" },
+            { "name": "pageNo", "value": "1" },
+            { "name": "numOfRows", "value": "10" },
+            { "name": "dataType", "value": "JSON" },
+            { "name": "base_date", "value": "={{ $json.baseDate }}" },
+            { "name": "base_time", "value": "={{ $json.baseTime }}" },
+            { "name": "nx", "value": "={{ $json.nx }}" },
+            { "name": "ny", "value": "={{ $json.ny }}" }
+          ]
+        },
+        "options": { "timeout": 10000 }
+      },
+      "id": "http-weather",
+      "name": "기상청 초단기실황 API",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [640, 300],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "url": "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtFcst",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "serviceKey", "value": "={{ $env.WEATHER_API_KEY }}" },
+            { "name": "pageNo", "value": "1" },
+            { "name": "numOfRows", "value": "60" },
+            { "name": "dataType", "value": "JSON" },
+            { "name": "base_date", "value": "={{ $('API 파라미터 계산').item.json.baseDate }}" },
+            { "name": "base_time", "value": "={{ $('API 파라미터 계산').item.json.baseTime }}" },
+            { "name": "nx", "value": "60" },
+            { "name": "ny", "value": "125" }
+          ]
+        },
+        "options": { "timeout": 10000 }
+      },
+      "id": "http-forecast",
+      "name": "초단기예보 (최고/최저기온)",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [640, 480],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "jsCode": "// 초단기실황 파싱\nconst items = $('기상청 초단기실황 API').item.json?.response?.body?.items?.item || [];\nconst fcstItems = $('초단기예보 (최고/최저기온)').item.json?.response?.body?.items?.item || [];\n\n// category → value 맵 생성\nconst obs = {};\nfor (const item of items) {\n  obs[item.category] = item.obsrValue;\n}\n\n// 예보에서 최고/최저기온 계산\nconst temps = fcstItems\n  .filter(i => i.category === 'T1H')\n  .map(i => parseFloat(i.fcstValue))\n  .filter(v => !isNaN(v));\n\nconst tempHigh = temps.length ? Math.max(...temps) : null;\nconst tempLow  = temps.length ? Math.min(...temps) : null;\n\n// SKY 코드 → 텍스트\nconst skyMap = { '1': '맑음', '3': '구름많음', '4': '흐림' };\n// PTY 코드 → 텍스트\nconst ptyMap = { '0': '없음', '1': '비', '2': '비/눈', '3': '눈', '5': '빗방울', '6': '진눈깨비', '7': '눈날림' };\n// 풍향 계산\nconst windDirDeg = parseFloat(obs['VEC'] || 0);\nconst dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];\nconst windDir = dirs[Math.round(windDirDeg / 22.5) % 16];\n\nreturn [{\n  json: {\n    station:    '이천시 부발읍',\n    nx:         60,\n    ny:         125,\n    temp:       parseFloat(obs['T1H'] || 0),\n    temp_high:  tempHigh,\n    temp_low:   tempLow,\n    sky:        skyMap[obs['SKY']] || '맑음',\n    humidity:   parseInt(obs['REH'] || 0),\n    wind_dir:   windDir,\n    wind_speed: parseFloat(obs['WSD'] || 0),\n    pop:        0,\n    pty:        ptyMap[obs['PTY']] || '없음',\n    fetched_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "code-parse",
+      "name": "날씨 데이터 파싱",
+      "type": "n8n-nodes-base.code",
+      "position": [860, 380],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "weather_cache",
+        "dataToSend": "autoMapInputData",
+        "options": {
+          "upsert": true,
+          "onConflict": "station"
+        }
+      },
+      "id": "supabase-weather",
+      "name": "Supabase weather_cache UPSERT",
+      "type": "n8n-nodes-base.supabase",
+      "position": [1060, 380],
+      "typeVersion": 1,
+      "credentials": { "supabaseApi": { "name": "Supabase (Family News Hub)" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 성공 로그\nconst data = $input.item.json;\nconsole.log(`[WF-04] 날씨 수집 완료: ${data.temp}°C, ${data.sky}, 습도${data.humidity}%`);\nreturn $input.all();"
+      },
+      "id": "code-log",
+      "name": "완료 로그",
+      "type": "n8n-nodes-base.code",
+      "position": [1260, 380],
+      "typeVersion": 2
+    }
+  ],
+  "connections": {
+    "1시간마다 실행": {
+      "main": [[{ "node": "API 파라미터 계산", "type": "main", "index": 0 }]]
+    },
+    "API 파라미터 계산": {
+      "main": [
+        [{ "node": "기상청 초단기실황 API", "type": "main", "index": 0 }],
+        [{ "node": "초단기예보 (최고/최저기온)", "type": "main", "index": 0 }]
+      ]
+    },
+    "기상청 초단기실황 API": {
+      "main": [[{ "node": "날씨 데이터 파싱", "type": "main", "index": 0 }]]
+    },
+    "초단기예보 (최고/최저기온)": {
+      "main": [[{ "node": "날씨 데이터 파싱", "type": "main", "index": 0 }]]
+    },
+    "날씨 데이터 파싱": {
+      "main": [[{ "node": "Supabase weather_cache UPSERT", "type": "main", "index": 0 }]]
+    },
+    "Supabase weather_cache UPSERT": {
+      "main": [[{ "node": "완료 로그", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": ["family-news-hub", "phase1", "weather"]
+}
