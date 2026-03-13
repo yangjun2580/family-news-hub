@@ -62,28 +62,59 @@ export default function EnvWidgets({ profile }: Props) {
   const [dust, setDust] = useState<DustCache | null>(null)
   const [fuel, setFuel] = useState<FuelCache | null>(null)
   const [loading, setLoading] = useState(true)
+  const [locationLabel, setLocationLabel] = useState<string>('내 위치')
 
   useEffect(() => {
-    async function fetchAll() {
-      const queries = [
+    async function fetchWithLocation(lat: number, lon: number) {
+      try {
+        const res = await fetch(`/api/env-data?lat=${lat}&lon=${lon}`)
+        if (!res.ok) throw new Error('API 오류')
+        const data = await res.json()
+        setWeather(data.weather)
+        setDust(data.dust)
+        setFuel(data.fuel)
+      } catch {
+        // 위치 기반 실패 시 DB 캐시 fallback
+        await fetchFromDB()
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    async function fetchFromDB() {
+      const [{ data: w }, { data: d }, { data: f }] = await Promise.all([
         supabase.from('weather_cache').select('*').order('fetched_at', { ascending: false }).limit(1),
         supabase.from('dust_cache').select('*').order('fetched_at', { ascending: false }).limit(1),
         supabase.from('fuel_cache').select('*').order('fetched_at', { ascending: false }).limit(1),
-      ] as const
-
-      const [{ data: w }, { data: d }, { data: f }] = await Promise.all(queries)
+      ])
       setWeather(w?.[0] ?? null)
       setDust(d?.[0] ?? null)
       setFuel(f?.[0] ?? null)
       setLoading(false)
     }
-    fetchAll()
+
+    if (typeof window !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords
+          setLocationLabel('현재 위치')
+          fetchWithLocation(latitude, longitude)
+        },
+        () => {
+          // 위치 거부 시 DB 캐시
+          fetchFromDB()
+        },
+        { timeout: 5000, maximumAge: 300000 }
+      )
+    } else {
+      fetchFromDB()
+    }
   }, [])
 
   const weatherEmoji =
-    weather?.pty && weather.pty !== '0'
-      ? PTY_EMOJI[weather.pty] ?? '🌧️'
-      : SKY_EMOJI[weather?.sky ?? ''] ?? '🌤️'
+    weather?.pty && String(weather.pty) !== '0'
+      ? PTY_EMOJI[String(weather.pty)] ?? '🌧️'
+      : SKY_EMOJI[String(weather?.sky ?? '')] ?? '🌤️'
 
   const dustLevel = getDustLevel(dust?.pm25 ?? null)
   const showFuel = profile === 'dad'
@@ -97,7 +128,7 @@ export default function EnvWidgets({ profile }: Props) {
           style={{ background: 'var(--surface)', boxShadow: 'var(--shadow)' }}
         >
           <p className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
-            날씨 · {weather.station}
+            날씨 · {locationLabel}
           </p>
           <div className="flex items-end gap-1.5">
             <span className="text-2xl">{weatherEmoji}</span>
