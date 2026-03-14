@@ -73,6 +73,7 @@ export default function EnvWidgets({ profile }: Props) {
         setWeather(data.weather)
         setDust(data.dust)
         setFuel(data.fuel)
+        if (data.locationName) setLocationLabel(`현재 위치(${data.locationName})`)
       } catch {
         // 위치 기반 실패 시 DB 캐시 fallback
         await fetchFromDB()

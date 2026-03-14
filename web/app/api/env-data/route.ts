@@ -63,12 +63,29 @@ function nearestStation(lat: number, lon: number): string {
   return best
 }
 
+async function getLocationName(lat: number, lon: number): Promise<string> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=ko`,
+      { headers: { 'User-Agent': 'family-news-hub/1.0' }, signal: AbortSignal.timeout(3000) }
+    )
+    const data = await res.json()
+    const addr = data.address || {}
+    return addr.city_district || addr.suburb || addr.borough || addr.county || addr.city || addr.state || '현재 위치'
+  } catch {
+    return '현재 위치'
+  }
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const lat = parseFloat(searchParams.get('lat') || '37.5665')
   const lon = parseFloat(searchParams.get('lon') || '126.9780')
 
   try {
+    // ── 위치명 (병렬로 실행) ──
+    const locationNamePromise = getLocationName(lat, lon)
+
     // ── 날씨 ──
     const { nx, ny } = latLonToGrid(lat, lon)
     const now = new Date(Date.now() + 9 * 3600000)
@@ -129,7 +146,8 @@ export async function GET(req: NextRequest) {
       lpg_chg: Math.round((gp(latest,'K015') - gp(prev,'K015')) * 100) / 100,
     }
 
-    return NextResponse.json({ weather, dust, fuel })
+    const locationName = await locationNamePromise
+    return NextResponse.json({ weather, dust, fuel, locationName })
   } catch (e) {
     console.error(e)
     return NextResponse.json({ error: String(e) }, { status: 500 })

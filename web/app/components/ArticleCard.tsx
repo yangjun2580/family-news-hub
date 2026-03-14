@@ -31,10 +31,7 @@ export default function ArticleCard({ article, isNew }: Props) {
   const ago = timeAgo(article.published_at)
   const { translated, body } = parseTranslation(article.summary)
 
-  // 표시할 제목: 영어 제목이면 번역본으로 대체, 없으면 원제 그대로
   const displayTitle = (isEnglishTitle(article.title) && translated) ? translated : article.title
-  // 번역 전 원본 영어 제목 (번역된 경우에만 작게 표시)
-  const originalTitle = (isEnglishTitle(article.title) && translated) ? article.title : null
 
   return (
     <div
@@ -63,20 +60,13 @@ export default function ArticleCard({ article, isNew }: Props) {
         </span>
       </div>
 
-      {/* Title (한국어 번역 or 원제) */}
+      {/* Title */}
       <h3
         className="mb-1 text-sm font-semibold leading-snug"
         style={{ color: 'var(--text-primary)' }}
       >
         {displayTitle}
       </h3>
-
-      {/* 원본 영어 제목 (번역된 경우에만 작게 표시) */}
-      {originalTitle && (
-        <p className="mb-1.5 text-xs leading-snug" style={{ color: 'var(--text-muted)' }}>
-          {originalTitle}
-        </p>
-      )}
 
       {/* Summary */}
       {body && (
@@ -97,14 +87,14 @@ export default function ArticleCard({ article, isNew }: Props) {
           href={article.source_url}
           target="_blank"
           rel="noopener noreferrer"
-          className="shrink-0 rounded-md px-2 py-1 text-xs font-medium transition-colors"
+          className="shrink-0 rounded px-1.5 py-0.5 text-xs transition-colors"
           style={{
             color: cat.color,
-            backgroundColor: cat.bg,
+            backgroundColor: `${cat.bg}99`,
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          기사 원문보기 ↗
+          원문 ↗
         </a>
       </div>
     </div>

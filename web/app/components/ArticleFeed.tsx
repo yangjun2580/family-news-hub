@@ -9,6 +9,7 @@ const PAGE_SIZE = 20
 type Props = {
   profile: string
   initialArticles: Article[]
+  onNewArticle?: () => void
 }
 
 function SkeletonCard() {
@@ -28,7 +29,7 @@ function SkeletonCard() {
   )
 }
 
-export default function ArticleFeed({ profile, initialArticles }: Props) {
+export default function ArticleFeed({ profile, initialArticles, onNewArticle }: Props) {
   const [articles, setArticles] = useState<Article[]>(initialArticles)
   const [loading, setLoading] = useState(false)
   const [hasMore, setHasMore] = useState(initialArticles.length === PAGE_SIZE)
@@ -78,6 +79,7 @@ export default function ArticleFeed({ profile, initialArticles }: Props) {
             return [newArticle, ...prev]
           })
           setNewIds((prev) => new Set([...prev, newArticle.id]))
+          onNewArticle?.()
           setTimeout(() => {
             setNewIds((prev) => {
               const next = new Set(prev)

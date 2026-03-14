@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Article } from '@/lib/supabase'
 import ProfileTabs from './ProfileTabs'
 import EnvWidgets from './EnvWidgets'
@@ -12,6 +12,16 @@ type Props = {
 
 export default function NewsFeedPage({ initialArticles }: Props) {
   const [profile, setProfile] = useState('all')
+  const [lastUpdate, setLastUpdate] = useState('')
+  const [isLive, setIsLive] = useState(false)
+
+  useEffect(() => {
+    const fmt = () => new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+    setLastUpdate(fmt())
+    setIsLive(true)
+    const t = setInterval(() => setLastUpdate(fmt()), 60000)
+    return () => clearInterval(t)
+  }, [])
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -28,9 +38,17 @@ export default function NewsFeedPage({ initialArticles }: Props) {
               우리 집 뉴스
             </h1>
           </div>
-          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            실시간 업데이트
-          </span>
+          <div className="flex items-center gap-1.5">
+            {isLive && (
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+              </span>
+            )}
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {lastUpdate ? `${lastUpdate} 업데이트` : '실시간'}
+            </span>
+          </div>
         </div>
 
         {/* Profile tabs */}
@@ -53,7 +71,11 @@ export default function NewsFeedPage({ initialArticles }: Props) {
       </div>
 
       {/* Article feed */}
-      <ArticleFeed profile={profile} initialArticles={profile === 'all' ? initialArticles : []} />
+      <ArticleFeed
+        profile={profile}
+        initialArticles={profile === 'all' ? initialArticles : []}
+        onNewArticle={() => setLastUpdate(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }))}
+      />
     </div>
   )
 }
