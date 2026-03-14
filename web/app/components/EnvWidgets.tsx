@@ -174,29 +174,32 @@ export default function EnvWidgets({ profile }: Props) {
       {showFuel && (
         loading ? <SkeletonWidget /> : !fuel ? <EmptyWidget label="유가" /> : (
           <div
-            className="flex min-w-[160px] flex-col gap-1 rounded-xl p-3"
+            className="flex min-w-[180px] flex-col gap-1 rounded-xl p-3"
             style={{ background: 'var(--surface)', boxShadow: 'var(--shadow)' }}
           >
             <p className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
               유가 · {fuel.region}
             </p>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1">
-                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>휘발유</span>
-                <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  {fuel.gasoline ? `${Math.round(fuel.gasoline).toLocaleString()}` : '–'}
-                </span>
-                <ChangeArrow val={fuel.gasoline_chg ?? null} />
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>휘발유</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {fuel.gasoline ? `${Math.round(fuel.gasoline).toLocaleString()}원` : '–'}
+                  </span>
+                  <ChangeArrow val={fuel.gasoline_chg ?? null} />
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>경유</span>
-                <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  {fuel.diesel ? `${Math.round(fuel.diesel).toLocaleString()}` : '–'}
-                </span>
-                <ChangeArrow val={fuel.diesel_chg ?? null} />
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>경유</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {fuel.diesel ? `${Math.round(fuel.diesel).toLocaleString()}원` : '–'}
+                  </span>
+                  <ChangeArrow val={fuel.diesel_chg ?? null} />
+                </div>
               </div>
             </div>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>원/리터</p>
           </div>
         )
       )}

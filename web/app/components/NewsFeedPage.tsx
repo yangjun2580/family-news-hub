@@ -15,6 +15,17 @@ export default function NewsFeedPage({ initialArticles }: Props) {
   const [lastUpdate, setLastUpdate] = useState('')
   const [isLive, setIsLive] = useState(false)
 
+  // 새로고침 후 탭 복원
+  useEffect(() => {
+    const saved = sessionStorage.getItem('profile')
+    if (saved) setProfile(saved)
+  }, [])
+
+  const handleProfileChange = (id: string) => {
+    setProfile(id)
+    sessionStorage.setItem('profile', id)
+  }
+
   useEffect(() => {
     const fmt = () => new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
     setLastUpdate(fmt())
@@ -52,7 +63,7 @@ export default function NewsFeedPage({ initialArticles }: Props) {
         </div>
 
         {/* Profile tabs */}
-        <ProfileTabs active={profile} onChange={setProfile} />
+        <ProfileTabs active={profile} onChange={handleProfileChange} />
 
         {/* Thin divider */}
         <div style={{ height: 1, background: 'var(--border)', margin: '0 16px' }} />
