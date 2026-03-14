@@ -180,24 +180,23 @@ export default function EnvWidgets({ profile }: Props) {
             <p className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
               유가 · {fuel.region}
             </p>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>휘발유</span>
+            <div className="flex items-center gap-3">
               <div className="flex items-center gap-1">
+                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>휘발유</span>
                 <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  {fuel.gasoline ? `${fuel.gasoline.toLocaleString()}원` : '–'}
+                  {fuel.gasoline ? `${Math.round(fuel.gasoline).toLocaleString()}` : '–'}
                 </span>
                 <ChangeArrow val={fuel.gasoline_chg ?? null} />
               </div>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>경유</span>
               <div className="flex items-center gap-1">
+                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>경유</span>
                 <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  {fuel.diesel ? `${fuel.diesel.toLocaleString()}원` : '–'}
+                  {fuel.diesel ? `${Math.round(fuel.diesel).toLocaleString()}` : '–'}
                 </span>
                 <ChangeArrow val={fuel.diesel_chg ?? null} />
               </div>
             </div>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>원/리터</p>
           </div>
         )
       )}

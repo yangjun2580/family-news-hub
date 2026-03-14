@@ -30,37 +30,45 @@ function latLonToGrid(lat: number, lon: number) {
   }
 }
 
-// 위도/경도 기준 가장 가까운 AirKorea 측정소 찾기
+// AirKorea API에서 실제 작동 확인된 측정소만 포함
 const STATIONS = [
-  { name: '중구',   lat: 37.5665, lon: 126.9780 },
-  { name: '강남구', lat: 37.5172, lon: 127.0473 },
-  { name: '강서구', lat: 37.5509, lon: 126.8495 },
-  { name: '노원구', lat: 37.6542, lon: 127.0568 },
-  { name: '관악구', lat: 37.4784, lon: 126.9516 },
-  { name: '인천',   lat: 37.4563, lon: 126.7052 },
-  { name: '수원',   lat: 37.2636, lon: 127.0286 },
-  { name: '성남',   lat: 37.4449, lon: 127.1388 },
-  { name: '고양',   lat: 37.6583, lon: 126.8320 },
-  { name: '부산',   lat: 35.1796, lon: 129.0756 },
-  { name: '대구',   lat: 35.8714, lon: 128.6014 },
-  { name: '광주',   lat: 35.1595, lon: 126.8526 },
-  { name: '대전',   lat: 36.3504, lon: 127.3845 },
-  { name: '울산',   lat: 35.5384, lon: 129.3114 },
-  { name: '세종',   lat: 36.4801, lon: 127.2890 },
-  { name: '청주',   lat: 36.6424, lon: 127.4890 },
-  { name: '전주',   lat: 35.8242, lon: 127.1480 },
-  { name: '포항',   lat: 36.0190, lon: 129.3435 },
-  { name: '창원',   lat: 35.2280, lon: 128.6811 },
-  { name: '제주',   lat: 33.4996, lon: 126.5312 },
+  { name: '중구',   lat: 37.5635, lon: 126.9780 },  // 서울 중구
+  { name: '강남구', lat: 37.5172, lon: 127.0473 },  // 서울 강남
+  { name: '강서구', lat: 37.5509, lon: 126.8495 },  // 서울 강서
+  { name: '노원구', lat: 37.6542, lon: 127.0568 },  // 서울 노원
+  { name: '관악구', lat: 37.4784, lon: 126.9516 },  // 서울 관악
+  { name: '성동구', lat: 37.5633, lon: 127.0371 },  // 서울 성동
+  { name: '송파구', lat: 37.5145, lon: 127.1050 },  // 서울 송파
+  { name: '양천구', lat: 37.5270, lon: 126.8560 },  // 서울 양천
+  { name: '부평',   lat: 37.5074, lon: 126.7219 },  // 인천 부평 (API 확인)
+  { name: '남동',   lat: 37.4490, lon: 126.7310 },  // 인천 남동 (API 확인)
+  { name: '좌동',   lat: 35.1840, lon: 129.2190 },  // 부산 좌동 (API 확인)
 ]
 
-function nearestStation(lat: number, lon: number): string {
-  let minDist = Infinity, best = '중구'
+async function fetchDust(stationName: string, key: string) {
+  const url = `http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty?serviceKey=${key}&returnType=json&numOfRows=1&pageNo=1&stationName=${encodeURIComponent(stationName)}&dataTerm=DAILY&ver=1.0`
+  const res = await fetch(url)
+  const data = await res.json()
+  const item = data.response.body.items[0] || {}
+  return {
+    pm10: parseInt(item.pm10Value || '0') || 0,
+    pm25: parseInt(item.pm25Value || '0') || 0,
+  }
+}
+
+async function nearestStation(lat: number, lon: number, key: string): Promise<{ name: string; pm10: number; pm25: number }> {
+  let minDist = Infinity, best = STATIONS[0]
   for (const s of STATIONS) {
     const d = (s.lat - lat) ** 2 + (s.lon - lon) ** 2
-    if (d < minDist) { minDist = d; best = s.name }
+    if (d < minDist) { minDist = d; best = s }
   }
-  return best
+  const dust = await fetchDust(best.name, key)
+  // 값이 0이면 서울 중구로 fallback
+  if (dust.pm10 === 0 && dust.pm25 === 0) {
+    const fallback = await fetchDust('중구', key)
+    return { name: '중구(서울)', ...fallback }
+  }
+  return { name: best.name, ...dust }
 }
 
 async function getLocationName(lat: number, lon: number): Promise<string> {
@@ -118,15 +126,8 @@ export async function GET(req: NextRequest) {
     }
 
     // ── 미세먼지 ──
-    const stationName = nearestStation(lat, lon)
-    const aRes = await fetch(`http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty?serviceKey=${AIRKOREA_KEY}&returnType=json&numOfRows=1&pageNo=1&stationName=${encodeURIComponent(stationName)}&dataTerm=DAILY&ver=1.0`)
-    const aData = await aRes.json()
-    const aItem = aData.response.body.items[0] || {}
-    const dust = {
-      station: stationName,
-      pm10: parseInt(aItem.pm10Value || '0') || 0,
-      pm25: parseInt(aItem.pm25Value || '0') || 0,
-    }
+    const { name: stationName, pm10, pm25 } = await nearestStation(lat, lon, AIRKOREA_KEY)
+    const dust = { station: stationName, pm10, pm25 }
 
     // ── 유가 ──
     const fRes = await fetch(`http://www.opinet.co.kr/api/avgRecentPrice.do?code=${OPINET_KEY}&out=json`)
