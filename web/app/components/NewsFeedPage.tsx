@@ -24,6 +24,7 @@ export default function NewsFeedPage({ initialArticles }: Props) {
   const handleProfileChange = (id: string) => {
     setProfile(id)
     sessionStorage.setItem('profile', id)
+    window.scrollTo({ top: 0, behavior: 'instant' })
   }
 
   useEffect(() => {

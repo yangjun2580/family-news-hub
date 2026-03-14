@@ -26,12 +26,22 @@ function isEnglishTitle(title: string): boolean {
   return koreanChars === 0 && title.trim().length > 3
 }
 
+function getArticleUrl(url: string | null): string {
+  if (!url) return '#'
+  // 연합뉴스 URL → AMP 버전 (빈 화면 방지)
+  if (url.includes('yna.co.kr/view/')) {
+    return url.replace('yna.co.kr/view/', 'yna.co.kr/amp/view/')
+  }
+  return url
+}
+
 export default function ArticleCard({ article, isNew }: Props) {
   const cat = getCategoryConfig(article.category)
   const ago = timeAgo(article.published_at)
   const { translated, body } = parseTranslation(article.summary)
 
   const displayTitle = (isEnglishTitle(article.title) && translated) ? translated : article.title
+  const articleUrl = getArticleUrl(article.source_url)
 
   return (
     <div
@@ -84,7 +94,7 @@ export default function ArticleCard({ article, isNew }: Props) {
           {article.source}
         </span>
         <a
-          href={article.source_url}
+          href={articleUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="shrink-0 rounded px-1.5 py-0.5 text-xs transition-colors"

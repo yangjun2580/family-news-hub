@@ -149,10 +149,10 @@ export default function EnvWidgets({ profile }: Props) {
       {/* Dust */}
       {loading ? <SkeletonWidget /> : !dust ? <EmptyWidget label="미세먼지" /> : (
         <div
-          className="flex min-w-[140px] flex-col gap-1 rounded-xl p-3"
+          className="flex min-w-[200px] flex-col gap-1 rounded-xl p-3"
           style={{ background: 'var(--surface)', boxShadow: 'var(--shadow)' }}
         >
-          <p className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
+          <p className="whitespace-nowrap text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
             미세먼지 · {dust.station}
           </p>
           <span
@@ -180,8 +180,8 @@ export default function EnvWidgets({ profile }: Props) {
             <p className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
               유가 · {fuel.region}
             </p>
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col gap-2.5">
+              <div className="flex items-center justify-between gap-3">
                 <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>휘발유</span>
                 <div className="flex items-center gap-1">
                   <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
@@ -190,7 +190,7 @@ export default function EnvWidgets({ profile }: Props) {
                   <ChangeArrow val={fuel.gasoline_chg ?? null} />
                 </div>
               </div>
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between gap-3">
                 <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>경유</span>
                 <div className="flex items-center gap-1">
                   <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>

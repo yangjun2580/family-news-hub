@@ -30,63 +30,68 @@ function latLonToGrid(lat: number, lon: number) {
   }
 }
 
-// AirKorea API 검증된 측정소 (서울 전체 구 + 수도권 + 광역시 일부)
-const STATIONS = [
-  // 서울 (모두 API 검증됨)
-  { name: '중구',     lat: 37.5635, lon: 126.9780 },
-  { name: '종로구',   lat: 37.5720, lon: 126.9794 },
-  { name: '강남구',   lat: 37.5172, lon: 127.0473 },
-  { name: '강서구',   lat: 37.5509, lon: 126.8495 },
-  { name: '강북구',   lat: 37.6396, lon: 127.0256 },
-  { name: '노원구',   lat: 37.6542, lon: 127.0568 },
-  { name: '도봉구',   lat: 37.6688, lon: 127.0471 },
-  { name: '은평구',   lat: 37.6176, lon: 126.9227 },
-  { name: '마포구',   lat: 37.5664, lon: 126.9017 },
-  { name: '서대문구', lat: 37.5791, lon: 126.9368 },
-  { name: '관악구',   lat: 37.4784, lon: 126.9516 },
-  { name: '동작구',   lat: 37.5124, lon: 126.9393 },
-  { name: '영등포구', lat: 37.5264, lon: 126.8962 },
-  { name: '구로구',   lat: 37.4955, lon: 126.8874 },
-  { name: '금천구',   lat: 37.4568, lon: 126.8955 },
-  { name: '양천구',   lat: 37.5270, lon: 126.8560 },
-  { name: '서초구',   lat: 37.4837, lon: 127.0324 },
-  { name: '송파구',   lat: 37.5145, lon: 127.1050 },
-  { name: '성동구',   lat: 37.5633, lon: 127.0371 },
-  { name: '광진구',   lat: 37.5385, lon: 127.0823 },
-  { name: '동대문구', lat: 37.5744, lon: 127.0397 },
-  { name: '중랑구',   lat: 37.5953, lon: 127.0927 },
-  { name: '성북구',   lat: 37.5894, lon: 127.0167 },
-  // 인천 (API 검증됨)
-  { name: '부평',     lat: 37.5074, lon: 126.7219 },
-  { name: '남동',     lat: 37.4490, lon: 126.7310 },
-  // 부산 (API 검증됨)
-  { name: '좌동',     lat: 35.1840, lon: 129.2190 },
-]
-
-async function fetchDust(stationName: string, key: string) {
-  const url = `http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty?serviceKey=${key}&returnType=json&numOfRows=1&pageNo=1&stationName=${encodeURIComponent(stationName)}&dataTerm=DAILY&ver=1.0`
-  const res = await fetch(url)
-  const data = await res.json()
-  const item = data.response.body.items[0] || {}
-  return {
-    pm10: parseInt(item.pm10Value || '0') || 0,
-    pm25: parseInt(item.pm25Value || '0') || 0,
-  }
+// 위도/경도 → 시도명 매핑 (getCtprvnRltmMesureDnsty 용)
+function latToSido(lat: number, lon: number): string {
+  // 제주
+  if (lat < 34.0) return '제주'
+  // 부산 (동남쪽)
+  if (lat < 35.5 && lon > 128.5) return '부산'
+  // 울산
+  if (lat >= 35.4 && lat < 35.7 && lon > 129.0) return '울산'
+  // 경남
+  if (lat < 35.5 && lon >= 127.5) return '경남'
+  // 대구
+  if (lat >= 35.7 && lat < 36.1 && lon >= 128.3 && lon < 129.0) return '대구'
+  // 광주
+  if (lat >= 35.0 && lat < 35.3 && lon >= 126.7 && lon < 127.0) return '광주'
+  // 전남
+  if (lat < 35.5 && lon < 127.5) return '전남'
+  // 전북
+  if (lat >= 35.5 && lat < 36.2 && lon >= 126.5 && lon < 127.5) return '전북'
+  // 대전
+  if (lat >= 36.2 && lat < 36.5 && lon >= 127.2 && lon < 127.6) return '대전'
+  // 세종
+  if (lat >= 36.4 && lat < 36.6 && lon >= 127.1 && lon < 127.4) return '세종'
+  // 충남
+  if (lat >= 36.0 && lat < 37.0 && lon < 127.2) return '충남'
+  // 충북
+  if (lat >= 36.5 && lat < 37.3 && lon >= 127.4 && lon < 128.5) return '충북'
+  // 강원
+  if (lon >= 128.0 && lat >= 37.0) return '강원'
+  // 경북
+  if (lat >= 36.1 && lat < 37.3 && lon >= 128.0) return '경북'
+  // 인천
+  if (lat >= 37.3 && lat < 37.7 && lon < 126.8) return '인천'
+  // 서울
+  if (lat >= 37.4 && lat < 37.7 && lon >= 126.8 && lon < 127.2) return '서울'
+  // 경기
+  if (lat >= 37.0 && lat < 38.3 && lon >= 126.5 && lon < 127.9) return '경기'
+  // 기본값
+  return '서울'
 }
 
-async function nearestStation(lat: number, lon: number, key: string): Promise<{ name: string; pm10: number; pm25: number }> {
-  let minDist = Infinity, best = STATIONS[0]
-  for (const s of STATIONS) {
-    const d = (s.lat - lat) ** 2 + (s.lon - lon) ** 2
-    if (d < minDist) { minDist = d; best = s }
+async function fetchCityDust(sidoName: string, key: string): Promise<{ name: string; pm10: number; pm25: number }> {
+  const url = `http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty?serviceKey=${key}&returnType=json&numOfRows=10&pageNo=1&sidoName=${encodeURIComponent(sidoName)}&ver=1.0`
+  const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
+  const data = await res.json()
+  const items: { stationName: string; pm10Value: string; pm25Value: string }[] = data?.response?.body?.items ?? []
+  // 첫 번째로 유효한(0이 아닌) 데이터 반환
+  for (const item of items) {
+    const pm10 = parseInt(item.pm10Value || '0') || 0
+    const pm25 = parseInt(item.pm25Value || '0') || 0
+    if (pm10 > 0 || pm25 > 0) {
+      return { name: `${item.stationName}(${sidoName})`, pm10, pm25 }
+    }
   }
-  const dust = await fetchDust(best.name, key)
-  // 값이 0이면 서울 중구로 fallback
-  if (dust.pm10 === 0 && dust.pm25 === 0) {
-    const fallback = await fetchDust('중구', key)
-    return { name: '중구(서울)', ...fallback }
+  // 유효 데이터 없으면 첫 항목 반환
+  if (items.length > 0) {
+    return {
+      name: `${items[0].stationName}(${sidoName})`,
+      pm10: parseInt(items[0].pm10Value || '0') || 0,
+      pm25: parseInt(items[0].pm25Value || '0') || 0,
+    }
   }
-  return { name: best.name, ...dust }
+  return { name: sidoName, pm10: 0, pm25: 0 }
 }
 
 async function getLocationName(lat: number, lon: number): Promise<string> {
@@ -144,7 +149,8 @@ export async function GET(req: NextRequest) {
     }
 
     // ── 미세먼지 ──
-    const { name: stationName, pm10, pm25 } = await nearestStation(lat, lon, AIRKOREA_KEY)
+    const sidoName = latToSido(lat, lon)
+    const { name: stationName, pm10, pm25 } = await fetchCityDust(sidoName, AIRKOREA_KEY)
     const dust = { station: stationName, pm10, pm25 }
 
     // ── 유가 ──

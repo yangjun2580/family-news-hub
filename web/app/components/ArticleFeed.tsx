@@ -29,6 +29,10 @@ function SkeletonCard() {
   )
 }
 
+// 프로필별 캐시 (탭 전환 지연 감소)
+const profileCache = new Map<string, { articles: Article[]; ts: number }>()
+const CACHE_TTL = 60000 // 1분
+
 export default function ArticleFeed({ profile, initialArticles, onNewArticle }: Props) {
   const [articles, setArticles] = useState<Article[]>(initialArticles)
   const [loading, setLoading] = useState(false)
@@ -41,8 +45,20 @@ export default function ArticleFeed({ profile, initialArticles, onNewArticle }: 
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false
-      if (profile === 'all' && initialArticles.length > 0) return
+      if (profile === 'all' && initialArticles.length > 0) {
+        profileCache.set('all', { articles: initialArticles, ts: Date.now() })
+        return
+      }
     }
+
+    // 캐시 확인 — 있으면 즉시 표시하고 백그라운드 갱신
+    const cached = profileCache.get(profile)
+    if (cached && Date.now() - cached.ts < CACHE_TTL) {
+      setArticles(cached.articles)
+      setHasMore(cached.articles.length === PAGE_SIZE)
+      return
+    }
+
     async function reload() {
       setLoading(true)
       pageRef.current = 1
@@ -57,8 +73,10 @@ export default function ArticleFeed({ profile, initialArticles, onNewArticle }: 
       }
 
       const { data } = await query
-      setArticles(data ?? [])
-      setHasMore((data?.length ?? 0) === PAGE_SIZE)
+      const result = data ?? []
+      setArticles(result)
+      setHasMore(result.length === PAGE_SIZE)
+      profileCache.set(profile, { articles: result, ts: Date.now() })
       setLoading(false)
     }
     reload()
