@@ -1,0 +1,264 @@
+{
+  "name": "WF-02 Claude Summarizer",
+  "nodes": [
+    {
+      "id": "node-trigger",
+      "name": "30분 스케줄",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-fetch",
+      "name": "미요약 기사 조회",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        440,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "DGfAkyb6sq7y5AJ2",
+          "name": "Postgres Direct (5433)"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, title, source, category, source_url FROM articles WHERE summary IS NULL AND title IS NOT NULL ORDER BY published_at DESC LIMIT 50",
+        "options": {}
+      }
+    },
+    {
+      "id": "node-split",
+      "name": "배치 분리",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        680,
+        300
+      ],
+      "parameters": {
+        "batchSize": 5,
+        "options": {}
+      }
+    },
+    {
+      "id": "node-claude",
+      "name": "Claude 요약 요청",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1400,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer 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"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => {\n  const title = $json.title || '';\n  const source = $json.source || '';\n  const category = $json.category || '';\n  const body = $json.article_body || '';\n\n  const koreanChars = (title.match(/[가-힣]/g) || []).length;\n  const isEnglishTitle = koreanChars === 0 && title.trim().length > 3;\n\n  let prompt = '당신은 뉴스 기사를 간결하게 요약하는 전문가입니다.\\n\\n';\n  prompt += '절대 규칙:\\n';\n  prompt += '- 기사 본문에 나온 내용만 요약할 것. 본문에 없는 정보를 추가하거나 추측하지 말 것\\n';\n  prompt += '- 인물 이름은 본문에 나온 그대로 사용할 것. 한자 이름을 임의로 해석하지 말 것\\n';\n  prompt += '- 李대통령, 尹대통령 등 한자 약칭은 본문 맥락에서 확인된 이름만 사용할 것\\n\\n';\n\n  if (isEnglishTitle) {\n    prompt += '이 기사는 영어 기사입니다. 반드시 전체를 한국어로 번역하여 요약하세요.\\n';\n    prompt += '첫 번째 줄: 📌 제목을 자연스러운 한국어로 번역 (예: 📌 오픈AI, 새 모델 발표)\\n';\n    prompt += '(빈 줄)\\n';\n    prompt += '두 번째 줄부터 아래 규칙으로 한국어 요약:\\n\\n';\n  }\n\n  prompt += '요약 형식 규칙:\\n';\n  prompt += '1. 5~8문장으로 요약할 것 (충분히 상세하게)\\n';\n  prompt += '2. 각 불릿(•) 문장 사이에 빈 줄을 넣어 가독성을 높일 것\\n';\n  prompt += '3. 문장 앞에 불릿(•)을 붙일 것\\n';\n  prompt += '4. 어려운 용어는 괄호 안에 쉬운 설명을 추가할 것\\n';\n  prompt += '5. 마지막 문장은 시사점 또는 결론으로 마무리\\n';\n  prompt += '6. 출력은 요약 내용만, 추가 설명이나 사족 없이\\n\\n';\n  prompt += '출력 예시:\\n';\n  prompt += '• 첫 번째 핵심 내용.\\n';\n  prompt += '\\n';\n  prompt += '• 두 번째 핵심 내용.\\n';\n  prompt += '\\n';\n  prompt += '• 세 번째 핵심 내용.\\n\\n';\n\n  prompt += '기사 제목: ' + title + '\\n';\n  prompt += '출처: ' + source + '\\n';\n  prompt += '카테고리: ' + category + '\\n\\n';\n\n  if (body && body.length > 50) {\n    prompt += '기사 본문:\\n' + body;\n  } else {\n    prompt += '(본문 없음 - 이 기사는 건너뛰세요. SKIP이라고만 출력하세요.)';\n  }\n\n  return {\n    model: 'anthropic/claude-haiku-4-5',\n    max_tokens: 800,\n    messages: [{ role: 'user', content: prompt }]\n  };\n})() }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "node-extract",
+      "name": "요약 추출",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const resp = $input.item.json;\nconst summary = resp.choices[0].message.content.trim();\nconst article = $('배치 분리').item.json;\nconst title = article.title || '';\n\n// Check if article should be skipped\nif (summary === 'SKIP' || summary.includes('SKIP')) {\n  return [];\n}\n\n// Check if English title failed translation (no 📌)\nconst koreanChars = (title.match(/[가-힣]/g) || []).length;\nconst isEnglish = koreanChars === 0 && title.trim().length > 3;\nif (isEnglish && !summary.startsWith('📌')) {\n  return [];\n}\n\nreturn [{ json: { id: article.id, summary: summary } }];"
+      }
+    },
+    {
+      "id": "node-update",
+      "name": "요약 저장",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1880,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "DGfAkyb6sq7y5AJ2",
+          "name": "Postgres Direct (5433)"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE articles SET summary = '{{ $json.summary.replace(/'/g, \"''\") }}', updated_at = NOW() WHERE id = '{{ $json.id }}'",
+        "options": {}
+      }
+    },
+    {
+      "id": "node-fetch",
+      "parameters": {
+        "url": "={{ $json.source_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 10000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (compatible; NewsBot/1.0)"
+            }
+          ]
+        }
+      },
+      "name": "기사 본문 가져오기",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        300
+      ],
+      "continueOnFail": true
+    },
+    {
+      "id": "node-extract",
+      "parameters": {
+        "jsCode": "const html = $input.item.json.data || $input.item.json.body || '';\nconst article = $('배치 분리').item.json;\n\nlet text = html\n  .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '')\n  .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '')\n  .replace(/<nav[^>]*>[\\s\\S]*?<\\/nav>/gi, '')\n  .replace(/<header[^>]*>[\\s\\S]*?<\\/header>/gi, '')\n  .replace(/<footer[^>]*>[\\s\\S]*?<\\/footer>/gi, '')\n  .replace(/<aside[^>]*>[\\s\\S]*?<\\/aside>/gi, '');\n\nlet bodyMatch = text.match(/<article[^>]*>([\\s\\S]*?)<\\/article>/i);\nif (!bodyMatch) bodyMatch = text.match(/class=['\"]article[_-]?body[^'\"]*['\"][^>]*>([\\s\\S]*?)<\\/div>/i);\nif (bodyMatch) text = bodyMatch[1];\n\ntext = text.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();\n\nif (text.length > 2000) text = text.substring(0, 2000) + '...';\n\nreturn [{ json: { ...article, article_body: text.length > 50 ? text : '' } }];"
+      },
+      "name": "본문 추출",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "30분 스케줄": {
+      "main": [
+        [
+          {
+            "node": "미요약 기사 조회",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "미요약 기사 조회": {
+      "main": [
+        [
+          {
+            "node": "배치 분리",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "배치 분리": {
+      "main": [
+        [],
+        [
+          {
+            "node": "기사 본문 가져오기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude 요약 요청": {
+      "main": [
+        [
+          {
+            "node": "요약 추출",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "요약 추출": {
+      "main": [
+        [
+          {
+            "node": "요약 저장",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "요약 저장": {
+      "main": [
+        [
+          {
+            "node": "배치 분리",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "기사 본문 가져오기": {
+      "main": [
+        [
+          {
+            "node": "본문 추출",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "본문 추출": {
+      "main": [
+        [
+          {
+            "node": "Claude 요약 요청",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
