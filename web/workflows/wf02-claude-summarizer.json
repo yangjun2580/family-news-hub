@@ -22,7 +22,7 @@
       }
     },
     {
-      "id": "node-fetch",
+      "id": "node-fetch-articles",
       "name": "미요약 기사 조회",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
@@ -89,7 +89,7 @@
       }
     },
     {
-      "id": "node-extract",
+      "id": "node-summary-extract",
       "name": "요약 추출",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -123,7 +123,7 @@
       }
     },
     {
-      "id": "node-fetch",
+      "id": "node-fetch-html",
       "parameters": {
         "url": "={{ $json.source_url }}",
         "options": {
@@ -154,7 +154,7 @@
       "continueOnFail": true
     },
     {
-      "id": "node-extract",
+      "id": "node-body-extract",
       "parameters": {
         "jsCode": "const html = $input.item.json.data || $input.item.json.body || '';\nconst article = $('배치 분리').item.json;\n\nlet text = html\n  .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '')\n  .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '')\n  .replace(/<nav[^>]*>[\\s\\S]*?<\\/nav>/gi, '')\n  .replace(/<header[^>]*>[\\s\\S]*?<\\/header>/gi, '')\n  .replace(/<footer[^>]*>[\\s\\S]*?<\\/footer>/gi, '')\n  .replace(/<aside[^>]*>[\\s\\S]*?<\\/aside>/gi, '');\n\nlet bodyMatch = text.match(/<article[^>]*>([\\s\\S]*?)<\\/article>/i);\nif (!bodyMatch) bodyMatch = text.match(/class=['\"]article[_-]?body[^'\"]*['\"][^>]*>([\\s\\S]*?)<\\/div>/i);\nif (bodyMatch) text = bodyMatch[1];\n\ntext = text.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();\n\nif (text.length > 2000) text = text.substring(0, 2000) + '...';\n\nreturn [{ json: { ...article, article_body: text.length > 50 ? text : '' } }];"
       },

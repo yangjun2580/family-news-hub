@@ -62,8 +62,8 @@ function latToSido(lat: number, lon: number): string {
   if (lat >= 36.1 && lat < 37.3 && lon >= 128.0) return '경북'
   // 인천
   if (lat >= 37.3 && lat < 37.7 && lon < 126.8) return '인천'
-  // 서울
-  if (lat >= 37.4 && lat < 37.7 && lon >= 126.8 && lon < 127.2) return '서울'
+  // 서울 (남단 서초/강남 37.43 이상, 판교 37.39~37.40 제외)
+  if (lat >= 37.43 && lat < 37.7 && lon >= 126.8 && lon < 127.2) return '서울'
   // 경기
   if (lat >= 37.0 && lat < 38.3 && lon >= 126.5 && lon < 127.9) return '경기'
   // 기본값
