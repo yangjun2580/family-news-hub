@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(clawteam *)",
+      "Bash(clawteam:*)",
+      "Bash(python3.11 -m clawteam:*)",
+      "Bash(git *)",
+      "Bash(git:*)",
+      "Bash(npm *)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(rm:*)",
+      "Bash(mv:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(curl:*)",
+      "Bash(docker:*)",
+      "Bash(tmux:*)",
+      "Bash(python3:*)",
+      "Bash(python3.11:*)",
+      "Bash(cd:*)",
+      "Bash(echo:*)",
+      "Bash(source:*)",
+      "Bash(pm2:*)"
+    ]
+  }
+}
