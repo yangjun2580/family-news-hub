@@ -63,3 +63,46 @@ export type FuelCache = {
   region: string
   fetched_at: string
 }
+
+export type TrafficFlow = {
+  id: number
+  link_id: string
+  road_name: string | null
+  road_type: string
+  speed: number
+  travel_time: number | null
+  direction: string | null
+  coord_x: number | null
+  coord_y: number | null
+  source_created_at: string | null
+  fetched_at: string
+}
+
+export type TrafficIncident = {
+  id: number
+  incident_id: string | null
+  incident_type: string
+  road_name: string | null
+  road_type: string | null
+  description: string | null
+  start_date: string | null
+  end_date: string | null
+  coord_x: number
+  coord_y: number
+  congestion_length: number | null
+  is_active: boolean
+  fetched_at: string
+}
+
+export type TrafficCctv = {
+  id: number
+  cctv_name: string
+  cctv_url: string
+  cctv_type: number
+  road_section_id: string | null
+  road_type: string | null
+  coord_x: number
+  coord_y: number
+  resolution: string | null
+  fetched_at: string
+}

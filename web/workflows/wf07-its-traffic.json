@@ -1,0 +1,254 @@
+{
+  "name": "WF-07 ITS Traffic Collector",
+  "nodes": [
+    {
+      "id": "node-trigger",
+      "name": "5분 스케줄",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-fetch-traffic",
+      "name": "교통소통 API 호출",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 200],
+      "parameters": {
+        "method": "GET",
+        "url": "https://openapi.its.go.kr:9443/trafficInfo",
+        "authentication": "none",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "apiKey", "value": "={{ $env.ITS_API_KEY }}" },
+            { "name": "type", "value": "all" },
+            { "name": "getType", "value": "json" },
+            { "name": "minX", "value": "126.5" },
+            { "name": "maxX", "value": "127.5" },
+            { "name": "minY", "value": "37.0" },
+            { "name": "maxY", "value": "37.8" }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-fetch-incident",
+      "name": "돌발정보 API 호출",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 500],
+      "parameters": {
+        "method": "GET",
+        "url": "https://openapi.its.go.kr:9443/incidentInfo",
+        "authentication": "none",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "apiKey", "value": "={{ $env.ITS_API_KEY }}" },
+            { "name": "type", "value": "all" },
+            { "name": "getType", "value": "json" },
+            { "name": "minX", "value": "126.5" },
+            { "name": "maxX", "value": "127.5" },
+            { "name": "minY", "value": "37.0" },
+            { "name": "maxY", "value": "37.8" }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-process-traffic",
+      "name": "교통소통 데이터 처리",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 200],
+      "parameters": {
+        "jsCode": "const resp = $input.item.json;\nconst body = resp.body || resp.data || [];\nconst items = Array.isArray(body) ? body : [];\n\nif (items.length === 0) {\n  return [{ json: { status: 'no_data', count: 0 } }];\n}\n\n// 속도 0 이상인 유효 데이터만 필터\nconst valid = items.filter(i => i.speed > 0).slice(0, 500);\n\nconst values = valid.map(i => {\n  const linkId = (i.linkId || '').replace(/'/g, '');\n  const roadName = (i.roadName || '').replace(/'/g, '');\n  const speed = parseFloat(i.speed) || 0;\n  const travelTime = parseInt(i.travelTime) || 0;\n  return `('${linkId}', '${roadName}', ${speed}, ${travelTime}, NOW())`;\n}).join(',\\n');\n\nreturn [{ json: { insertQuery: `INSERT INTO traffic_flow (link_id, road_name, speed, travel_time, fetched_at) VALUES ${values} ON CONFLICT (link_id, fetched_at) DO UPDATE SET speed = EXCLUDED.speed, travel_time = EXCLUDED.travel_time`, count: valid.length } }];"
+      }
+    },
+    {
+      "id": "node-process-incident",
+      "name": "돌발정보 데이터 처리",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 500],
+      "parameters": {
+        "jsCode": "const resp = $input.item.json;\nconst body = resp.body || resp.data || [];\nconst items = Array.isArray(body) ? body : [];\n\nif (items.length === 0) {\n  return [{ json: { deactivateQuery: 'SELECT 1', insertQuery: 'SELECT 1', count: 0 } }];\n}\n\n// 기존 활성 돌발 비활성화\nconst deactivateQuery = 'UPDATE traffic_incident SET is_active = FALSE WHERE is_active = TRUE';\n\nconst values = items.map(i => {\n  const incidentId = (i.incidentId || i.eventId || '').replace(/'/g, '');\n  const incidentType = (i.type || i.incidentType || '').replace(/'/g, '');\n  const roadName = (i.roadName || '').replace(/'/g, '');\n  const description = (i.description || '').replace(/'/g, '');\n  const coordX = parseFloat(i.coordX || i.coord_x) || 0;\n  const coordY = parseFloat(i.coordY || i.coord_y) || 0;\n  return `('${incidentId}', '${incidentType}', '${roadName}', '${description}', ${coordX}, ${coordY}, TRUE, NOW())`;\n}).join(',\\n');\n\nconst insertQuery = `INSERT INTO traffic_incident (incident_id, incident_type, road_name, description, coord_x, coord_y, is_active, fetched_at) VALUES ${values} ON CONFLICT (incident_id) DO UPDATE SET is_active = TRUE, description = EXCLUDED.description, fetched_at = EXCLUDED.fetched_at`;\n\nreturn [{ json: { deactivateQuery, insertQuery, count: items.length } }];"
+      }
+    },
+    {
+      "id": "node-save-traffic",
+      "name": "교통소통 저장",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [960, 200],
+      "credentials": {
+        "postgres": {
+          "id": "DGfAkyb6sq7y5AJ2",
+          "name": "Postgres Direct (5433)"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.insertQuery }}",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-deactivate-incidents",
+      "name": "기존 돌발 비활성화",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [960, 400],
+      "credentials": {
+        "postgres": {
+          "id": "DGfAkyb6sq7y5AJ2",
+          "name": "Postgres Direct (5433)"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.deactivateQuery }}",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-save-incidents",
+      "name": "돌발정보 저장",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1200, 500],
+      "credentials": {
+        "postgres": {
+          "id": "DGfAkyb6sq7y5AJ2",
+          "name": "Postgres Direct (5433)"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.insertQuery }}",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-log",
+      "name": "수집 로그 기록",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1440, 300],
+      "credentials": {
+        "postgres": {
+          "id": "DGfAkyb6sq7y5AJ2",
+          "name": "Postgres Direct (5433)"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO traffic_fetch_log (api_type, status, record_count, fetched_at) VALUES ('traffic', 'success', 0, NOW()), ('incident', 'success', 0, NOW())",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-cleanup",
+      "name": "24시간 이전 데이터 삭제",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1440, 500],
+      "credentials": {
+        "postgres": {
+          "id": "DGfAkyb6sq7y5AJ2",
+          "name": "Postgres Direct (5433)"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM traffic_flow WHERE fetched_at < NOW() - INTERVAL '24 hours'; DELETE FROM traffic_fetch_log WHERE fetched_at < NOW() - INTERVAL '7 days';",
+        "options": {}
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "5분 스케줄": {
+      "main": [
+        [
+          { "node": "교통소통 API 호출", "type": "main", "index": 0 },
+          { "node": "돌발정보 API 호출", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "교통소통 API 호출": {
+      "main": [
+        [{ "node": "교통소통 데이터 처리", "type": "main", "index": 0 }]
+      ]
+    },
+    "돌발정보 API 호출": {
+      "main": [
+        [{ "node": "돌발정보 데이터 처리", "type": "main", "index": 0 }]
+      ]
+    },
+    "교통소통 데이터 처리": {
+      "main": [
+        [{ "node": "교통소통 저장", "type": "main", "index": 0 }]
+      ]
+    },
+    "돌발정보 데이터 처리": {
+      "main": [
+        [
+          { "node": "기존 돌발 비활성화", "type": "main", "index": 0 },
+          { "node": "돌발정보 저장", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "교통소통 저장": {
+      "main": [
+        [{ "node": "수집 로그 기록", "type": "main", "index": 0 }]
+      ]
+    },
+    "돌발정보 저장": {
+      "main": [
+        [{ "node": "수집 로그 기록", "type": "main", "index": 0 }]
+      ]
+    },
+    "수집 로그 기록": {
+      "main": [
+        [{ "node": "24시간 이전 데이터 삭제", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
