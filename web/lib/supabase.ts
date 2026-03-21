@@ -35,12 +35,12 @@ export type WeatherCache = {
   temp: number | null
   temp_high: number | null
   temp_low: number | null
-  sky: string | null
+  sky: number | string | null
   humidity: number | null
-  wind_dir: string | null
+  wind_dir: number | string | null
   wind_speed: number | null
   pop: number | null
-  pty: string | null
+  pty: number | string | null
   fetched_at: string
 }
 

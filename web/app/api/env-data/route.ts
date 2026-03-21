@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const WEATHER_KEY = process.env.WEATHER_API_KEY!
-const AIRKOREA_KEY = process.env.AIRKOREA_API_KEY!
-const OPINET_KEY = process.env.OPINET_API_KEY!
+const WEATHER_KEY = process.env.WEATHER_API_KEY || ''
+const AIRKOREA_KEY = process.env.AIRKOREA_API_KEY || ''
+const OPINET_KEY = process.env.OPINET_API_KEY || ''
 
 // 위도/경도 → 기상청 격자(nx, ny) 변환
 function latLonToGrid(lat: number, lon: number) {
@@ -108,73 +108,98 @@ async function getLocationName(lat: number, lon: number): Promise<string> {
   }
 }
 
+async function fetchWeather(lat: number, lon: number) {
+  const { nx, ny } = latLonToGrid(lat, lon)
+  const now = new Date(Date.now() + 9 * 3600000)
+  const base_date = now.toISOString().slice(0, 10).replace(/-/g, '')
+  const h = now.getUTCHours()
+  const candidates = [2, 5, 8, 11, 14, 17, 20, 23].filter(t => h >= t)
+  const bt = candidates.length ? candidates[candidates.length - 1] : 2
+  const base_time = String(bt).padStart(2, '0') + '00'
+
+  const wRes = await fetch(
+    `http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${WEATHER_KEY}&pageNo=1&numOfRows=300&dataType=JSON&base_date=${base_date}&base_time=${base_time}&nx=${nx}&ny=${ny}`,
+    { signal: AbortSignal.timeout(8000) }
+  )
+  const wData = await wRes.json()
+  const wItems: { category: string; fcstValue: string }[] = wData?.response?.body?.items?.item ?? []
+  const cats: Record<string, string> = {}
+  for (const i of wItems) {
+    if (['TMP', 'TMX', 'TMN', 'SKY', 'REH', 'VEC', 'WSD', 'POP', 'PTY'].includes(i.category) && !cats[i.category])
+      cats[i.category] = i.fcstValue
+  }
+  return {
+    station: `${lat.toFixed(2)},${lon.toFixed(2)}`,
+    nx, ny,
+    temp: parseFloat(cats.TMP || '0'),
+    temp_high: parseFloat(cats.TMX || '0'),
+    temp_low: parseFloat(cats.TMN || '0'),
+    sky: parseInt(cats.SKY || '1'),
+    humidity: parseInt(cats.REH || '0'),
+    wind_dir: parseInt(cats.VEC || '0'),
+    wind_speed: parseFloat(cats.WSD || '0'),
+    pop: parseInt(cats.POP || '0'),
+    pty: parseInt(cats.PTY || '0'),
+  }
+}
+
+async function fetchFuel() {
+  const fRes = await fetch(
+    `http://www.opinet.co.kr/api/avgRecentPrice.do?code=${OPINET_KEY}&out=json`,
+    { signal: AbortSignal.timeout(8000) }
+  )
+  const fText = await fRes.text()
+  const fData = JSON.parse(fText.trim())
+  const oils: { DATE: string; PRODCD: string; PRICE: string }[] = fData?.RESULT?.OIL ?? []
+  if (oils.length === 0) return null
+  const dates = [...new Set(oils.map(o => o.DATE))].sort()
+  const [prev, latest] = [dates[dates.length - 2], dates[dates.length - 1]]
+  const gp = (d: string, c: string) => parseFloat(oils.find(o => o.DATE === d && o.PRODCD === c)?.PRICE || '0')
+  return {
+    region: '전국평균',
+    gasoline: gp(latest, 'B027'),
+    diesel: gp(latest, 'C004'),
+    lpg: gp(latest, 'K015'),
+    gasoline_chg: Math.round((gp(latest, 'B027') - gp(prev, 'B027')) * 100) / 100,
+    diesel_chg: Math.round((gp(latest, 'C004') - gp(prev, 'C004')) * 100) / 100,
+    lpg_chg: Math.round((gp(latest, 'K015') - gp(prev, 'K015')) * 100) / 100,
+  }
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const lat = parseFloat(searchParams.get('lat') || '37.5665')
-  const lon = parseFloat(searchParams.get('lon') || '126.9780')
+  const rawLat = parseFloat(searchParams.get('lat') || '37.5665')
+  const rawLon = parseFloat(searchParams.get('lon') || '126.9780')
 
-  try {
-    // ── 위치명 (병렬로 실행) ──
-    const locationNamePromise = getLocationName(lat, lon)
+  // 입력 검증: 한반도 범위 (lat 33~39, lon 124~132)
+  const lat = (isNaN(rawLat) || rawLat < 33 || rawLat > 39) ? 37.5665 : rawLat
+  const lon = (isNaN(rawLon) || rawLon < 124 || rawLon > 132) ? 126.9780 : rawLon
 
-    // ── 날씨 ──
-    const { nx, ny } = latLonToGrid(lat, lon)
-    const now = new Date(Date.now() + 9 * 3600000)
-    const base_date = now.toISOString().slice(0, 10).replace(/-/g, '')
-    const h = now.getUTCHours()
-    const candidates = [2,5,8,11,14,17,20,23].filter(t => h >= t)
-    const bt = candidates.length ? candidates[candidates.length - 1] : 2
-    const base_time = String(bt).padStart(2, '0') + '00'
+  const sidoName = latToSido(lat, lon)
 
-    const wRes = await fetch(`http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${WEATHER_KEY}&pageNo=1&numOfRows=300&dataType=JSON&base_date=${base_date}&base_time=${base_time}&nx=${nx}&ny=${ny}`)
-    const wData = await wRes.json()
-    const wItems: { category: string; fcstValue: string }[] = wData.response.body.items.item
-    const cats: Record<string, string> = {}
-    for (const i of wItems) {
-      if (['TMP','TMX','TMN','SKY','REH','VEC','WSD','POP','PTY'].includes(i.category) && !cats[i.category])
-        cats[i.category] = i.fcstValue
-    }
-    const weather = {
-      station: `${lat.toFixed(2)},${lon.toFixed(2)}`,
-      nx, ny,
-      temp: parseFloat(cats.TMP || '0'),
-      temp_high: parseFloat(cats.TMX || '0'),
-      temp_low: parseFloat(cats.TMN || '0'),
-      sky: parseInt(cats.SKY || '1'),
-      humidity: parseInt(cats.REH || '0'),
-      wind_dir: parseInt(cats.VEC || '0'),
-      wind_speed: parseFloat(cats.WSD || '0'),
-      pop: parseInt(cats.POP || '0'),
-      pty: parseInt(cats.PTY || '0'),
-    }
+  // 모든 API를 병렬로 호출 — 부분 실패 허용
+  const [weatherResult, dustResult, fuelResult, locationResult] = await Promise.allSettled([
+    fetchWeather(lat, lon),
+    fetchCityDust(sidoName, AIRKOREA_KEY),
+    fetchFuel(),
+    getLocationName(lat, lon),
+  ])
 
-    // ── 미세먼지 ──
-    const sidoName = latToSido(lat, lon)
-    const { name: stationName, pm10, pm25 } = await fetchCityDust(sidoName, AIRKOREA_KEY)
-    const dust = { station: stationName, pm10, pm25 }
+  const weather = weatherResult.status === 'fulfilled' ? weatherResult.value : null
+  const dustData = dustResult.status === 'fulfilled' ? dustResult.value : null
+  const dust = dustData ? { station: dustData.name, pm10: dustData.pm10, pm25: dustData.pm25 } : null
+  const fuel = fuelResult.status === 'fulfilled' ? fuelResult.value : null
+  const locationName = locationResult.status === 'fulfilled' ? locationResult.value : '현재 위치'
 
-    // ── 유가 ──
-    const fRes = await fetch(`http://www.opinet.co.kr/api/avgRecentPrice.do?code=${OPINET_KEY}&out=json`)
-    const fText = await fRes.text()
-    const fData = JSON.parse(fText.trim())
-    const oils: { DATE: string; PRODCD: string; PRICE: string }[] = fData.RESULT.OIL
-    const dates = [...new Set(oils.map(o => o.DATE))].sort()
-    const [prev, latest] = [dates[dates.length - 2], dates[dates.length - 1]]
-    const gp = (d: string, c: string) => parseFloat(oils.find(o => o.DATE === d && o.PRODCD === c)?.PRICE || '0')
-    const fuel = {
-      region: '전국평균',
-      gasoline: gp(latest, 'B027'),
-      diesel: gp(latest, 'C004'),
-      lpg: gp(latest, 'K015'),
-      gasoline_chg: Math.round((gp(latest,'B027') - gp(prev,'B027')) * 100) / 100,
-      diesel_chg: Math.round((gp(latest,'C004') - gp(prev,'C004')) * 100) / 100,
-      lpg_chg: Math.round((gp(latest,'K015') - gp(prev,'K015')) * 100) / 100,
-    }
-
-    const locationName = await locationNamePromise
-    return NextResponse.json({ weather, dust, fuel, locationName })
-  } catch (e) {
-    console.error(e)
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+  // 모든 API 실패 시에만 에러 반환
+  if (!weather && !dust && !fuel) {
+    console.error('All env-data APIs failed:', {
+      weather: weatherResult.status === 'rejected' ? String(weatherResult.reason) : 'ok',
+      dust: dustResult.status === 'rejected' ? String(dustResult.reason) : 'ok',
+      fuel: fuelResult.status === 'rejected' ? String(fuelResult.reason) : 'ok',
+    })
+    return NextResponse.json({ error: '환경 데이터를 가져올 수 없습니다' }, { status: 502 })
   }
+
+  return NextResponse.json({ weather, dust, fuel, locationName })
 }

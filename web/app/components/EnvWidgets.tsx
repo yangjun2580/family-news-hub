@@ -70,10 +70,22 @@ export default function EnvWidgets({ profile }: Props) {
         const res = await fetch(`/api/env-data?lat=${lat}&lon=${lon}`)
         if (!res.ok) throw new Error('API 오류')
         const data = await res.json()
-        setWeather(data.weather)
-        setDust(data.dust)
-        setFuel(data.fuel)
+        // 부분 성공 지원: null인 항목은 DB 캐시로 보완
+        if (data.weather) setWeather(data.weather)
+        if (data.dust) setDust(data.dust)
+        if (data.fuel) setFuel(data.fuel)
         if (data.locationName) setLocationLabel(`현재 위치(${data.locationName})`)
+        // 누락된 항목은 DB fallback
+        if (!data.weather || !data.dust || !data.fuel) {
+          const [{ data: w }, { data: d }, { data: f }] = await Promise.all([
+            !data.weather ? supabase.from('weather_cache').select('*').order('fetched_at', { ascending: false }).limit(1) : { data: null },
+            !data.dust ? supabase.from('dust_cache').select('*').order('fetched_at', { ascending: false }).limit(1) : { data: null },
+            !data.fuel ? supabase.from('fuel_cache').select('*').order('fetched_at', { ascending: false }).limit(1) : { data: null },
+          ])
+          if (w?.[0] && !data.weather) setWeather(w[0])
+          if (d?.[0] && !data.dust) setDust(d[0])
+          if (f?.[0] && !data.fuel) setFuel(f[0])
+        }
       } catch {
         // 위치 기반 실패 시 DB 캐시 fallback
         await fetchFromDB()

@@ -74,7 +74,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer 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"
+              "value": "Bearer {{ $env.OPENROUTER_API_KEY }}"
             },
             {
               "name": "Content-Type",
@@ -98,7 +98,7 @@
         300
       ],
       "parameters": {
-        "jsCode": "const resp = $input.item.json;\nconst summary = resp.choices[0].message.content.trim();\nconst article = $('배치 분리').item.json;\nconst title = article.title || '';\n\n// Check if article should be skipped\nif (summary === 'SKIP' || summary.includes('SKIP')) {\n  return [];\n}\n\n// Check if English title failed translation (no 📌)\nconst koreanChars = (title.match(/[가-힣]/g) || []).length;\nconst isEnglish = koreanChars === 0 && title.trim().length > 3;\nif (isEnglish && !summary.startsWith('📌')) {\n  return [];\n}\n\nreturn [{ json: { id: article.id, summary: summary } }];"
+        "jsCode": "const resp = $input.item.json;\nconst summary = resp.choices?.[0]?.message?.content?.trim() || '';\nconst article = $('배치 분리').item.json;\nconst title = article.title || '';\n\n// Check if article should be skipped\nif (!summary || summary === 'SKIP' || summary.includes('SKIP')) {\n  return [];\n}\n\n// Check if English title needs translation\nconst koreanChars = (title.match(/[가-힣]/g) || []).length;\nconst isEnglish = koreanChars === 0 && title.trim().length > 3;\n\nif (isEnglish && !summary.startsWith('📌')) {\n  // 📌 없으면 자동으로 제목 앞에 추가하여 저장\n  const translatedSummary = '📌 ' + title + '\\n' + summary;\n  return [{ json: { id: article.id, summary: translatedSummary } }];\n}\n\nreturn [{ json: { id: article.id, summary: summary } }];"
       }
     },
     {
@@ -118,8 +118,10 @@
       },
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE articles SET summary = '{{ $json.summary.replace(/'/g, \"''\") }}', updated_at = NOW() WHERE id = '{{ $json.id }}'",
-        "options": {}
+        "query": "UPDATE articles SET summary = $1, updated_at = NOW() WHERE id = $2::uuid",
+        "options": {
+          "queryReplacement": "={{ [$json.summary, $json.id] }}"
+        }
       }
     },
     {
@@ -156,7 +158,7 @@
     {
       "id": "node-body-extract",
       "parameters": {
-        "jsCode": "const html = $input.item.json.data || $input.item.json.body || '';\nconst article = $('배치 분리').item.json;\n\nlet text = html\n  .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '')\n  .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '')\n  .replace(/<nav[^>]*>[\\s\\S]*?<\\/nav>/gi, '')\n  .replace(/<header[^>]*>[\\s\\S]*?<\\/header>/gi, '')\n  .replace(/<footer[^>]*>[\\s\\S]*?<\\/footer>/gi, '')\n  .replace(/<aside[^>]*>[\\s\\S]*?<\\/aside>/gi, '');\n\nlet bodyMatch = text.match(/<article[^>]*>([\\s\\S]*?)<\\/article>/i);\nif (!bodyMatch) bodyMatch = text.match(/class=['\"]article[_-]?body[^'\"]*['\"][^>]*>([\\s\\S]*?)<\\/div>/i);\nif (bodyMatch) text = bodyMatch[1];\n\ntext = text.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();\n\nif (text.length > 2000) text = text.substring(0, 2000) + '...';\n\nreturn [{ json: { ...article, article_body: text.length > 50 ? text : '' } }];"
+        "jsCode": "const html = $input.item.json.data || $input.item.json.body || '';\nconst article = $('배치 분리').item.json;\n\nlet text = html\n  .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '')\n  .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '')\n  .replace(/<nav[^>]*>[\\s\\S]*?<\\/nav>/gi, '')\n  .replace(/<header[^>]*>[\\s\\S]*?<\\/header>/gi, '')\n  .replace(/<footer[^>]*>[\\s\\S]*?<\\/footer>/gi, '')\n  .replace(/<aside[^>]*>[\\s\\S]*?<\\/aside>/gi, '');\n\n// 다양한 HTML 구조에서 본문 추출 시도\nlet bodyMatch = text.match(/<article[^>]*class=['\"][^'\"]*story-news[^'\"]*['\"][^>]*>([\\s\\S]*?)<\\/article>/i);\nif (!bodyMatch) bodyMatch = text.match(/<article[^>]*>([\\s\\S]*?)<\\/article>/i);\nif (!bodyMatch) bodyMatch = text.match(/class=['\"][^'\"]*article[_-]?body[^'\"]*['\"][^>]*>([\\s\\S]*?)<\\/div>/i);\nif (!bodyMatch) bodyMatch = text.match(/class=['\"][^'\"]*post[_-]?content[^'\"]*['\"][^>]*>([\\s\\S]*?)<\\/div>/i);\nif (!bodyMatch) bodyMatch = text.match(/class=['\"][^'\"]*entry[_-]?content[^'\"]*['\"][^>]*>([\\s\\S]*?)<\\/div>/i);\nif (!bodyMatch) bodyMatch = text.match(/<main[^>]*>([\\s\\S]*?)<\\/main>/i);\nif (bodyMatch) text = bodyMatch[1];\n\ntext = text.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();\n\nif (text.length > 2000) text = text.substring(0, 2000) + '...';\n\nreturn [{ json: { ...article, article_body: text.length > 50 ? text : '' } }];"
       },
       "name": "본문 추출",
       "type": "n8n-nodes-base.code",
