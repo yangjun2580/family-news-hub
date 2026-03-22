@@ -7,9 +7,13 @@ async function getInitialArticles(): Promise<Article[]> {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+  const twoDaysAgo = new Date()
+  twoDaysAgo.setDate(twoDaysAgo.getDate() - 2)
+
   const { data } = await supabase
     .from('articles')
     .select('*')
+    .gte('published_at', twoDaysAgo.toISOString())
     .order('published_at', { ascending: false })
     .limit(20)
 
