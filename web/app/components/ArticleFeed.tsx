@@ -109,6 +109,7 @@ export default function ArticleFeed({ profile, initialArticles, onNewArticle }: 
     reload()
 
     return () => { abortController.abort() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile])
 
   // Realtime subscription
@@ -139,6 +140,7 @@ export default function ArticleFeed({ profile, initialArticles, onNewArticle }: 
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile])
 
   // UPDATE 이벤트 구독 — 요약이 추가될 때 실시간 반영

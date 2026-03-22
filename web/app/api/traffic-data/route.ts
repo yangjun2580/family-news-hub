@@ -4,7 +4,7 @@ const ITS_API_KEY = process.env.ITS_API_KEY || ''
 const ITS_BASE = 'https://openapi.its.go.kr:9443'
 
 // 서울/경기 기본 bounding box
-const DEFAULT_BBOX = { minX: 126.5, maxX: 127.5, minY: 37.0, maxY: 37.8 }
+type BBox = { minX: number; maxX: number; minY: number; maxY: number }
 
 // 인메모리 캐시 (5분 TTL)
 const cache = new Map<string, { data: unknown; expires: number }>()
@@ -43,7 +43,7 @@ type IncidentItem = {
   congestionLength?: number
 }
 
-async function fetchTrafficFlow(bbox: typeof DEFAULT_BBOX): Promise<TrafficFlowItem[]> {
+async function fetchTrafficFlow(bbox: BBox): Promise<TrafficFlowItem[]> {
   const url = `${ITS_BASE}/trafficInfo?apiKey=${ITS_API_KEY}&type=all&getType=json&minX=${bbox.minX}&maxX=${bbox.maxX}&minY=${bbox.minY}&maxY=${bbox.maxY}`
   const res = await fetch(url, { signal: AbortSignal.timeout(10000) })
   const data = await res.json()
@@ -56,7 +56,7 @@ async function fetchTrafficFlow(bbox: typeof DEFAULT_BBOX): Promise<TrafficFlowI
   return Array.isArray(body) ? body : []
 }
 
-async function fetchIncidents(bbox: typeof DEFAULT_BBOX): Promise<IncidentItem[]> {
+async function fetchIncidents(bbox: BBox): Promise<IncidentItem[]> {
   const url = `${ITS_BASE}/incidentInfo?apiKey=${ITS_API_KEY}&type=all&getType=json&minX=${bbox.minX}&maxX=${bbox.maxX}&minY=${bbox.minY}&maxY=${bbox.maxY}`
   const res = await fetch(url, { signal: AbortSignal.timeout(10000) })
   const data = await res.json()
