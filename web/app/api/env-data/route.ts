@@ -62,8 +62,15 @@ function latToSido(lat: number, lon: number): string {
   if (lat >= 36.1 && lat < 37.3 && lon >= 128.0) return '경북'
   // 인천
   if (lat >= 37.3 && lat < 37.7 && lon < 126.8) return '인천'
-  // 서울 (남단 서초/강남 37.43 이상, 판교 37.39~37.40 제외)
-  if (lat >= 37.43 && lat < 37.7 && lon >= 126.8 && lon < 127.2) return '서울'
+  // 서울 (남단 서초/강남 37.43 이상)
+  // 동쪽 경계: 강동구 동단 127.17이나 구리시(37.60/127.13) 제외 필요
+  // 구리/남양주: lat 37.56~37.66, lon 127.10~127.22
+  // 하남: lat 37.52~37.56, lon 127.18~127.22
+  if (lat >= 37.43 && lat < 37.7 && lon >= 126.8 && lon < 127.18) {
+    // 구리/남양주 영역 (lon >= 127.10 && lat >= 37.56) → 경기
+    if (lon >= 127.10 && lat >= 37.56) return '경기'
+    return '서울'
+  }
   // 경기
   if (lat >= 37.0 && lat < 38.3 && lon >= 126.5 && lon < 127.9) return '경기'
   // 기본값
@@ -94,7 +101,7 @@ async function fetchCityDust(sidoName: string, key: string): Promise<{ name: str
   return { name: sidoName, pm10: 0, pm25: 0 }
 }
 
-async function getLocationName(lat: number, lon: number): Promise<string> {
+async function getLocationInfo(lat: number, lon: number): Promise<{ name: string; sido: string }> {
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=ko`,
@@ -102,9 +109,34 @@ async function getLocationName(lat: number, lon: number): Promise<string> {
     )
     const data = await res.json()
     const addr = data.address || {}
-    return addr.city_district || addr.suburb || addr.borough || addr.county || addr.city || addr.state || '현재 위치'
+    const name = addr.city_district || addr.suburb || addr.borough || addr.county || addr.city || addr.state || '현재 위치'
+
+    // 시도명 추출 (역지오코딩이 정확)
+    const state = addr.state || ''
+    const sidoMap: Record<string, string> = {
+      '서울특별시': '서울', '서울': '서울',
+      '부산광역시': '부산', '부산': '부산',
+      '대구광역시': '대구', '대구': '대구',
+      '인천광역시': '인천', '인천': '인천',
+      '광주광역시': '광주', '광주': '광주',
+      '대전광역시': '대전', '대전': '대전',
+      '울산광역시': '울산', '울산': '울산',
+      '세종특별자치시': '세종', '세종': '세종',
+      '경기도': '경기', '경기': '경기',
+      '강원특별자치도': '강원', '강원도': '강원', '강원': '강원',
+      '충청북도': '충북', '충북': '충북',
+      '충청남도': '충남', '충남': '충남',
+      '전북특별자치도': '전북', '전라북도': '전북', '전북': '전북',
+      '전라남도': '전남', '전남': '전남',
+      '경상북도': '경북', '경북': '경북',
+      '경상남도': '경남', '경남': '경남',
+      '제주특별자치도': '제주', '제주도': '제주', '제주': '제주',
+    }
+    const sido = sidoMap[state] || ''
+
+    return { name, sido }
   } catch {
-    return '현재 위치'
+    return { name: '현재 위치', sido: '' }
   }
 }
 
@@ -175,21 +207,22 @@ export async function GET(req: NextRequest) {
   const lat = (isNaN(rawLat) || rawLat < 33 || rawLat > 39) ? 37.5665 : rawLat
   const lon = (isNaN(rawLon) || rawLon < 124 || rawLon > 132) ? 126.9780 : rawLon
 
-  const sidoName = latToSido(lat, lon)
+  // 먼저 역지오코딩으로 정확한 시도 확보 (미세먼지 API에 필요)
+  const locationInfo = await getLocationInfo(lat, lon)
+  const sidoName = locationInfo.sido || latToSido(lat, lon)
 
-  // 모든 API를 병렬로 호출 — 부분 실패 허용
-  const [weatherResult, dustResult, fuelResult, locationResult] = await Promise.allSettled([
+  // 나머지 API를 병렬로 호출 — 부분 실패 허용
+  const [weatherResult, dustResult, fuelResult] = await Promise.allSettled([
     fetchWeather(lat, lon),
     fetchCityDust(sidoName, AIRKOREA_KEY),
     fetchFuel(),
-    getLocationName(lat, lon),
   ])
 
   const weather = weatherResult.status === 'fulfilled' ? weatherResult.value : null
   const dustData = dustResult.status === 'fulfilled' ? dustResult.value : null
   const dust = dustData ? { station: dustData.name, pm10: dustData.pm10, pm25: dustData.pm25 } : null
   const fuel = fuelResult.status === 'fulfilled' ? fuelResult.value : null
-  const locationName = locationResult.status === 'fulfilled' ? locationResult.value : '현재 위치'
+  const locationName = locationInfo.name || '현재 위치'
 
   // 모든 API 실패 시에만 에러 반환
   if (!weather && !dust && !fuel) {

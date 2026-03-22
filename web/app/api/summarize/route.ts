@@ -57,18 +57,24 @@ async function summarizeArticle(
 본문: ${body}
 
 지시사항:
-1. 첫 줄에 📌 기호와 함께 제목을 자연스러운 한국어로 번역하세요
-2. 그 다음 줄부터 기사 핵심 내용을 한국어 6~7줄로 요약하세요
-3. 요약은 자연스럽고 읽기 쉬운 한국어로 작성하세요`
+1. 첫 줄에 📌 기호와 함께 제목을 자연스러운 한국어로 번역
+2. 빈 줄 없이 바로 이어서 기사 핵심 내용을 한국어로 6~7문장 요약
+3. 각 문장을 줄바꿈으로 구분
+4. 마크다운(##, **, - 등) 절대 사용 금지
+5. 문장을 끝까지 완성하고, 중간에 "..." 또는 생략 금지
+6. 자연스럽고 읽기 쉬운 한국어로 작성`
     : `다음 기사를 요약해주세요.
 
 제목: ${title}
 본문: ${body}
 
 지시사항:
-1. 기사 핵심 내용을 한국어 6~7줄로 요약하세요
-2. 구체적 수치나 사실 관계를 포함하세요
-3. 자연스럽고 읽기 쉬운 한국어로 작성하세요`
+1. 기사 핵심 내용을 한국어 6~7문장으로 요약
+2. 각 문장을 줄바꿈으로 구분 (한 줄에 한 문장)
+3. 구체적 수치나 사실 관계를 포함
+4. 마크다운(##, **, - 등) 절대 사용 금지
+5. 문장을 끝까지 완성하고, 중간에 "..." 또는 생략 금지
+6. 자연스럽고 읽기 쉬운 한국어로 작성`
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (OPENROUTER_KEY) {
@@ -86,14 +92,24 @@ async function summarizeArticle(
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      max_tokens: 500,
+      max_tokens: 800,
       temperature: 0.3,
     }),
     signal: AbortSignal.timeout(30000),
   })
 
   const data = await res.json()
-  return data?.choices?.[0]?.message?.content?.trim() || ''
+  let content = data?.choices?.[0]?.message?.content?.trim() || ''
+
+  // 마크다운 헤더/형식 정리
+  content = content
+    .replace(/^#{1,3}\s*.+\n*/gm, '')  // ## 요약, ### 등 제거
+    .replace(/^\*\*[^*]+\*\*\n*/gm, '') // **제목** 제거
+    .replace(/^[-*]\s+/gm, '')          // 불릿 리스트 제거
+    .replace(/\n{3,}/g, '\n')           // 과도한 빈 줄 정리
+    .trim()
+
+  return content
 }
 
 export async function POST(req: NextRequest) {
