@@ -106,3 +106,16 @@ export type TrafficCctv = {
   resolution: string | null
   fetched_at: string
 }
+
+export type KidsNoteEntry = {
+  id: number
+  kidsnote_id: string
+  child_name: string
+  report_type: string
+  title: string
+  content: string
+  author: string
+  photos: string[]
+  report_date: string
+  fetched_at: string
+}

@@ -5,6 +5,7 @@ import { Article } from '@/lib/supabase'
 import ProfileTabs from './ProfileTabs'
 import EnvWidgets from './EnvWidgets'
 import ArticleFeed from './ArticleFeed'
+import KidsNoteFeed from './KidsNoteFeed'
 
 type Props = {
   initialArticles: Article[]
@@ -78,16 +79,20 @@ export default function NewsFeedPage({ initialArticles }: Props) {
       {/* Section label */}
       <div className="px-4 pb-2 pt-3">
         <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-          최신 뉴스
+          {profile === 'ijun' ? '키즈노트 알림장' : '최신 뉴스'}
         </h2>
       </div>
 
-      {/* Article feed */}
-      <ArticleFeed
-        profile={profile}
-        initialArticles={profile === 'all' ? initialArticles : []}
-        onNewArticle={() => setLastUpdate(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }))}
-      />
+      {/* Feed — 이준이 탭은 키즈노트 알림장, 나머지는 뉴스 피드 */}
+      {profile === 'ijun' ? (
+        <KidsNoteFeed />
+      ) : (
+        <ArticleFeed
+          profile={profile}
+          initialArticles={profile === 'all' ? initialArticles : []}
+          onNewArticle={() => setLastUpdate(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }))}
+        />
+      )}
     </div>
   )
 }

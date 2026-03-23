@@ -40,6 +40,12 @@ const PROFILES: ProfileTab[] = [
     emoji: '⚽',
     gradient: 'linear-gradient(135deg, #fa8231 0%, #e55039 100%)',
   },
+  {
+    id: 'ijun',
+    name: '이준이',
+    emoji: '🧒',
+    gradient: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+  },
 ]
 
 type Props = {
