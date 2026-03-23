@@ -1,13 +1,122 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { KidsNoteEntry } from '@/lib/supabase'
 import { timeAgo, getCategoryConfig } from '@/lib/utils'
 
+/* ── 라이트박스 (사진 크게 보기) ── */
+function Lightbox({
+  photos,
+  startIndex,
+  onClose,
+}: {
+  photos: string[]
+  startIndex: number
+  onClose: () => void
+}) {
+  const [idx, setIdx] = useState(startIndex)
+  const touchStartX = useRef(0)
+  const touchDeltaX = useRef(0)
+
+  // 원본 URL (large_resize → large 또는 original)
+  const fullUrl = photos[idx].replace('/img_640_resize.jpg', '/img_l.jpg')
+
+  const prev = useCallback(() => setIdx((i) => Math.max(0, i - 1)), [])
+  const next = useCallback(() => setIdx((i) => Math.min(photos.length - 1, i + 1)), [photos.length])
+
+  // 키보드
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+      if (e.key === 'ArrowLeft') prev()
+      if (e.key === 'ArrowRight') next()
+    }
+    document.addEventListener('keydown', handler)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', handler)
+      document.body.style.overflow = ''
+    }
+  }, [onClose, prev, next])
+
+  // 터치 스와이프
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX
+    touchDeltaX.current = 0
+  }
+  const onTouchMove = (e: React.TouchEvent) => {
+    touchDeltaX.current = e.touches[0].clientX - touchStartX.current
+  }
+  const onTouchEnd = () => {
+    if (touchDeltaX.current > 60) prev()
+    else if (touchDeltaX.current < -60) next()
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.9)' }}
+      onClick={onClose}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
+      {/* 상단 카운터 + 닫기 */}
+      <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 pt-[env(safe-area-inset-top,12px)] pb-2 z-10">
+        <span className="text-sm font-medium text-white/80">
+          {idx + 1} / {photos.length}
+        </span>
+        <button
+          onClick={onClose}
+          className="flex h-10 w-10 items-center justify-center rounded-full text-white/80 active:bg-white/10"
+        >
+          <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* 사진 */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={fullUrl}
+        alt={`사진 ${idx + 1}`}
+        className="max-h-[85vh] max-w-[95vw] object-contain select-none"
+        onClick={(e) => e.stopPropagation()}
+        draggable={false}
+      />
+
+      {/* 좌우 버튼 (데스크탑) */}
+      {idx > 0 && (
+        <button
+          className="absolute left-2 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white active:bg-black/60"
+          onClick={(e) => { e.stopPropagation(); prev() }}
+        >
+          <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M13 4l-6 6 6 6" />
+          </svg>
+        </button>
+      )}
+      {idx < photos.length - 1 && (
+        <button
+          className="absolute right-2 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white active:bg-black/60"
+          onClick={(e) => { e.stopPropagation(); next() }}
+        >
+          <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M7 4l6 6-6 6" />
+          </svg>
+        </button>
+      )}
+    </div>
+  )
+}
+
+/* ── 사진 갤러리 (횡스크롤 썸네일) ── */
 function PhotoGallery({ photos }: { photos: string[] }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [scrollPos, setScrollPos] = useState(0)
   const [maxScroll, setMaxScroll] = useState(0)
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null)
 
   useEffect(() => {
     const el = scrollRef.current
@@ -22,56 +131,63 @@ function PhotoGallery({ photos }: { photos: string[] }) {
   }, [photos])
 
   return (
-    <div className="relative mb-2 -mx-4">
-      {/* 횡스크롤 사진 리스트 */}
-      <div
-        ref={scrollRef}
-        className="flex gap-2 overflow-x-auto px-4 pb-2 snap-x snap-mandatory"
-        style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
-      >
-        {photos.map((url, i) => (
-          <a
-            key={i}
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 snap-start"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={url}
-              alt={`사진 ${i + 1}`}
-              className="h-48 w-48 rounded-xl object-cover transition-transform active:scale-95"
-              loading="lazy"
-            />
-          </a>
-        ))}
+    <>
+      <div className="relative mb-2 -mx-4">
+        <div
+          ref={scrollRef}
+          className="flex gap-2 overflow-x-auto px-4 pb-2 snap-x snap-mandatory"
+          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+        >
+          {photos.map((url, i) => (
+            <button
+              key={i}
+              className="shrink-0 snap-start"
+              onClick={() => setLightboxIdx(i)}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={url}
+                alt={`사진 ${i + 1}`}
+                className="h-48 w-48 rounded-xl object-cover transition-transform active:scale-95"
+                loading="lazy"
+              />
+            </button>
+          ))}
+        </div>
+
+        {photos.length > 2 && (
+          <div className="flex items-center justify-center gap-1 pt-1">
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {Math.min(Math.floor(scrollPos / 200) + 2, photos.length)}/{photos.length}
+            </span>
+            <div
+              className="ml-1 h-1 w-12 overflow-hidden rounded-full"
+              style={{ background: 'var(--border)' }}
+            >
+              <div
+                className="h-full rounded-full transition-all duration-150"
+                style={{
+                  background: 'var(--text-muted)',
+                  width: maxScroll > 0 ? `${Math.max(20, (scrollPos / maxScroll) * 100)}%` : '100%',
+                }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* 스크롤 인디케이터 */}
-      {photos.length > 2 && (
-        <div className="flex items-center justify-center gap-1 pt-1">
-          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            {Math.min(Math.floor(scrollPos / 200) + 2, photos.length)}/{photos.length}
-          </span>
-          <div
-            className="ml-1 h-1 w-12 overflow-hidden rounded-full"
-            style={{ background: 'var(--border)' }}
-          >
-            <div
-              className="h-full rounded-full transition-all duration-150"
-              style={{
-                background: 'var(--text-muted)',
-                width: maxScroll > 0 ? `${Math.max(20, (scrollPos / maxScroll) * 100)}%` : '100%',
-              }}
-            />
-          </div>
-        </div>
+      {lightboxIdx !== null && (
+        <Lightbox
+          photos={photos}
+          startIndex={lightboxIdx}
+          onClose={() => setLightboxIdx(null)}
+        />
       )}
-    </div>
+    </>
   )
 }
 
+/* ── 알림장 카드 ── */
 function KidsNoteCard({ entry }: { entry: KidsNoteEntry }) {
   const cat = getCategoryConfig(entry.report_type)
   const ago = timeAgo(entry.report_date)
@@ -91,7 +207,6 @@ function KidsNoteCard({ entry }: { entry: KidsNoteEntry }) {
       }}
     >
       <div className="p-4 pb-2">
-        {/* Top row */}
         <div className="mb-2 flex items-center gap-2">
           <span
             className="shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold"
@@ -109,7 +224,6 @@ function KidsNoteCard({ entry }: { entry: KidsNoteEntry }) {
           </span>
         </div>
 
-        {/* Title */}
         <h3
           className="mb-1 text-sm font-semibold leading-snug"
           style={{ color: 'var(--text-primary)' }}
@@ -117,7 +231,6 @@ function KidsNoteCard({ entry }: { entry: KidsNoteEntry }) {
           {entry.title}
         </h3>
 
-        {/* Content */}
         {entry.content && (
           <div className="mb-2">
             <p
@@ -140,10 +253,8 @@ function KidsNoteCard({ entry }: { entry: KidsNoteEntry }) {
         )}
       </div>
 
-      {/* Photos — 횡스크롤 갤러리 */}
       {hasPhotos && <PhotoGallery photos={entry.photos} />}
 
-      {/* Author */}
       <div className="px-4 pb-3">
         <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
           {entry.author ? `${entry.author} 선생님` : '키즈노트'}
