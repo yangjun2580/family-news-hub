@@ -1,8 +1,76 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { KidsNoteEntry } from '@/lib/supabase'
 import { timeAgo, getCategoryConfig } from '@/lib/utils'
+
+function PhotoGallery({ photos }: { photos: string[] }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [scrollPos, setScrollPos] = useState(0)
+  const [maxScroll, setMaxScroll] = useState(0)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const update = () => {
+      setScrollPos(el.scrollLeft)
+      setMaxScroll(el.scrollWidth - el.clientWidth)
+    }
+    update()
+    el.addEventListener('scroll', update, { passive: true })
+    return () => el.removeEventListener('scroll', update)
+  }, [photos])
+
+  return (
+    <div className="relative mb-2 -mx-4">
+      {/* 횡스크롤 사진 리스트 */}
+      <div
+        ref={scrollRef}
+        className="flex gap-2 overflow-x-auto px-4 pb-2 snap-x snap-mandatory"
+        style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+      >
+        {photos.map((url, i) => (
+          <a
+            key={i}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 snap-start"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt={`사진 ${i + 1}`}
+              className="h-48 w-48 rounded-xl object-cover transition-transform active:scale-95"
+              loading="lazy"
+            />
+          </a>
+        ))}
+      </div>
+
+      {/* 스크롤 인디케이터 */}
+      {photos.length > 2 && (
+        <div className="flex items-center justify-center gap-1 pt-1">
+          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            {Math.min(Math.floor(scrollPos / 200) + 2, photos.length)}/{photos.length}
+          </span>
+          <div
+            className="ml-1 h-1 w-12 overflow-hidden rounded-full"
+            style={{ background: 'var(--border)' }}
+          >
+            <div
+              className="h-full rounded-full transition-all duration-150"
+              style={{
+                background: 'var(--text-muted)',
+                width: maxScroll > 0 ? `${Math.max(20, (scrollPos / maxScroll) * 100)}%` : '100%',
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function KidsNoteCard({ entry }: { entry: KidsNoteEntry }) {
   const cat = getCategoryConfig(entry.report_type)
@@ -11,84 +79,72 @@ function KidsNoteCard({ entry }: { entry: KidsNoteEntry }) {
 
   const isLong = entry.content.length > 150
   const displayContent = expanded ? entry.content : entry.content.slice(0, 150)
+  const hasPhotos = entry.photos && entry.photos.length > 0
 
   return (
     <div
-      className="rounded-xl p-4"
+      className="overflow-hidden rounded-xl"
       style={{
         background: 'var(--surface)',
         boxShadow: 'var(--shadow)',
         borderLeft: `3px solid ${cat.color}`,
       }}
     >
-      {/* Top row */}
-      <div className="mb-2 flex items-center gap-2">
-        <span
-          className="shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold"
-          style={{ color: cat.color, backgroundColor: cat.bg }}
+      <div className="p-4 pb-2">
+        {/* Top row */}
+        <div className="mb-2 flex items-center gap-2">
+          <span
+            className="shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold"
+            style={{ color: cat.color, backgroundColor: cat.bg }}
+          >
+            {cat.label}
+          </span>
+          {hasPhotos && (
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {entry.photos.length}장
+            </span>
+          )}
+          <span className="ml-auto shrink-0 text-xs" style={{ color: 'var(--text-muted)' }}>
+            {ago}
+          </span>
+        </div>
+
+        {/* Title */}
+        <h3
+          className="mb-1 text-sm font-semibold leading-snug"
+          style={{ color: 'var(--text-primary)' }}
         >
-          {cat.label}
-        </span>
-        <span className="ml-auto shrink-0 text-xs" style={{ color: 'var(--text-muted)' }}>
-          {ago}
-        </span>
+          {entry.title}
+        </h3>
+
+        {/* Content */}
+        {entry.content && (
+          <div className="mb-2">
+            <p
+              className="whitespace-pre-line text-xs leading-relaxed"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              {displayContent}
+              {isLong && !expanded && '...'}
+            </p>
+            {isLong && (
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className="mt-1 text-xs font-medium"
+                style={{ color: cat.color }}
+              >
+                {expanded ? '접기' : '더 보기'}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Title */}
-      <h3
-        className="mb-1 text-sm font-semibold leading-snug"
-        style={{ color: 'var(--text-primary)' }}
-      >
-        {entry.title}
-      </h3>
-
-      {/* Content */}
-      {entry.content && (
-        <div className="mb-2">
-          <p
-            className="whitespace-pre-line text-xs leading-relaxed"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            {displayContent}
-            {isLong && !expanded && '...'}
-          </p>
-          {isLong && (
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="mt-1 text-xs font-medium"
-              style={{ color: cat.color }}
-            >
-              {expanded ? '접기' : '더 보기'}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Photos */}
-      {entry.photos && entry.photos.length > 0 && (
-        <div className="mb-2 flex gap-2 overflow-x-auto">
-          {entry.photos.slice(0, 4).map((url, i) => (
-            <img
-              key={i}
-              src={url}
-              alt={`사진 ${i + 1}`}
-              className="h-20 w-20 shrink-0 rounded-lg object-cover"
-              loading="lazy"
-            />
-          ))}
-          {entry.photos.length > 4 && (
-            <div
-              className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg text-xs font-medium"
-              style={{ background: 'var(--bg)', color: 'var(--text-muted)' }}
-            >
-              +{entry.photos.length - 4}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Photos — 횡스크롤 갤러리 */}
+      {hasPhotos && <PhotoGallery photos={entry.photos} />}
 
       {/* Author */}
-      <div className="flex items-center gap-2">
+      <div className="px-4 pb-3">
         <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
           {entry.author ? `${entry.author} 선생님` : '키즈노트'}
         </span>
@@ -109,7 +165,10 @@ function SkeletonCard() {
       </div>
       <div className="skeleton mb-1 h-4 w-full" />
       <div className="skeleton mb-1 h-4 w-4/5" />
-      <div className="skeleton mt-2 h-3 w-20" />
+      <div className="flex gap-2 mt-2">
+        <div className="skeleton h-32 w-32 rounded-xl" />
+        <div className="skeleton h-32 w-32 rounded-xl" />
+      </div>
     </div>
   )
 }

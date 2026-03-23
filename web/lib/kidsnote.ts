@@ -7,6 +7,8 @@ type KidsNoteImage = {
   original: string
   large: string
   small: string
+  large_resize: string
+  small_resize: string
 }
 
 export type KidsNoteReport = {
@@ -19,7 +21,7 @@ export type KidsNoteReport = {
   class_name: string
   date_written: string
   created: string
-  images: KidsNoteImage[]
+  attached_images: KidsNoteImage[]
 }
 
 export type KidsNoteAlbum = {
@@ -29,7 +31,7 @@ export type KidsNoteAlbum = {
   author: { name: string }
   author_name: string
   created: string
-  images: KidsNoteImage[]
+  attached_images: KidsNoteImage[]
 }
 
 type KidsNoteSession = {
