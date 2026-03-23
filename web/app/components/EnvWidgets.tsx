@@ -57,10 +57,7 @@ type Props = {
   profile: string
 }
 
-// 이준이 탭 — 키즈노트에서는 환경 위젯 숨김
 export default function EnvWidgets({ profile }: Props) {
-  if (profile === 'ijun') return null
-
   const [weather, setWeather] = useState<WeatherCache | null>(null)
   const [dust, setDust] = useState<DustCache | null>(null)
   const [fuel, setFuel] = useState<FuelCache | null>(null)
@@ -134,6 +131,9 @@ export default function EnvWidgets({ profile }: Props) {
 
   const dustLevel = getDustLevel(dust?.pm25 ?? null)
   const showFuel = profile === 'dad'
+
+  // 이준이 탭 — 키즈노트에서는 환경 위젯 숨김
+  if (profile === 'ijun') return null
 
   return (
     <div className="tabs-scroll flex gap-3 overflow-x-auto px-4 pb-2">
