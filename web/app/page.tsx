@@ -14,6 +14,7 @@ async function getInitialArticles(): Promise<Article[]> {
     const { data } = await supabase
       .from('articles')
       .select('*')
+      .not('summary', 'is', null)
       .gte('published_at', twoDaysAgo.toISOString())
       .order('published_at', { ascending: false })
       .limit(20)

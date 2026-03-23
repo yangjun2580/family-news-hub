@@ -49,8 +49,8 @@ function setCacheEntry(key: string, articles: Article[]) {
 }
 
 export default function ArticleFeed({ profile, initialArticles, onNewArticle }: Props) {
-  // 2일 이내 기사만 필터
-  const filtered = initialArticles.filter(a => a.published_at >= getTwoDaysAgo())
+  // 2일 이내 + 요약 완료된 기사만 필터
+  const filtered = initialArticles.filter(a => a.published_at >= getTwoDaysAgo() && a.summary)
   const [articles, setArticles] = useState<Article[]>(filtered)
   const [loading, setLoading] = useState(false)
   const [hasMore, setHasMore] = useState(filtered.length === PAGE_SIZE)
@@ -95,6 +95,7 @@ export default function ArticleFeed({ profile, initialArticles, onNewArticle }: 
       let query = supabase
         .from('articles')
         .select('*')
+        .not('summary', 'is', null)
         .gte('published_at', twoDaysAgo)
         .order('published_at', { ascending: false })
         .limit(PAGE_SIZE)
@@ -130,6 +131,7 @@ export default function ArticleFeed({ profile, initialArticles, onNewArticle }: 
         { event: 'INSERT', schema: 'public', table: 'articles' },
         (payload) => {
           const newArticle = payload.new as Article
+          if (!newArticle.summary) return
           if (profile !== 'all' && !newArticle.profiles?.includes(profile)) return
           setArticles((prev) => {
             if (prev.find((a) => a.id === newArticle.id)) return prev
@@ -180,6 +182,7 @@ export default function ArticleFeed({ profile, initialArticles, onNewArticle }: 
     let query = supabase
       .from('articles')
       .select('*')
+      .not('summary', 'is', null)
       .gte('published_at', twoDaysAgo)
       .order('published_at', { ascending: false })
       .range(offset, offset + PAGE_SIZE - 1)
