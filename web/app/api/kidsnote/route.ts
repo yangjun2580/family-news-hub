@@ -28,7 +28,6 @@ export async function GET() {
     // 2. 키즈노트 API에서 새로 가져오기
     const childId = process.env.KIDSNOTE_CHILD_ID
     if (!childId) {
-      // 환경변수 미설정 시 캐시된 데이터라도 반환
       if (cached && cached.length > 0) {
         return NextResponse.json({ entries: cached, fromCache: true })
       }
@@ -44,15 +43,15 @@ export async function GET() {
     const childName = process.env.KIDSNOTE_CHILD_NAME ?? '이준이'
     const now = new Date().toISOString()
 
-    // 3. Supabase에 캐시 저장 (upsert)
+    // 3. 실제 API 응답 구조에 맞춰 파싱
     const reportRows = reports.map((r) => ({
       kidsnote_id: String(r.id),
-      child_name: childName,
+      child_name: r.child_name || childName,
       report_type: mapReportType(r.type),
-      title: r.title || mapReportType(r.type),
-      content: r.content_text || '',
-      author: r.writer_name || '',
-      photos: (r.images ?? []).map((img) => img.url),
+      title: `${r.date_written} ${r.class_name || '알림장'}`,
+      content: r.content || '',
+      author: r.author_name || r.author?.name || '',
+      photos: (r.images ?? []).map((img) => img.original || img.large || img.small),
       report_date: r.created,
       fetched_at: now,
     }))
@@ -62,9 +61,9 @@ export async function GET() {
       child_name: childName,
       report_type: '앨범',
       title: a.title || '앨범',
-      content: a.content_text || '',
-      author: a.writer_name || '',
-      photos: (a.images ?? []).map((img) => img.url),
+      content: a.content || '',
+      author: a.author_name || a.author?.name || '',
+      photos: (a.images ?? []).map((img) => img.original || img.large || img.small),
       report_date: a.created,
       fetched_at: now,
     }))
@@ -84,11 +83,11 @@ export async function GET() {
       .order('report_date', { ascending: false })
       .limit(20)
 
+    console.log('[kidsnote] success: fresh=', fresh?.length, 'rows=', rows.length)
     return NextResponse.json({ entries: fresh ?? rows })
   } catch (err) {
     console.error('[kidsnote] API error:', err)
 
-    // 에러 시에도 캐시 데이터 반환 시도
     const { data: fallback } = await supabaseAdmin
       .from('kidsnote_cache')
       .select('*')

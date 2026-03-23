@@ -1,26 +1,35 @@
 const KIDSNOTE_BASE = 'https://www.kidsnote.com/api'
 
-// 환경변수에서 센터/반 정보
 const CENTER_ID = process.env.KIDSNOTE_CENTER_ID ?? '66080'
 const CLASS_ID = process.env.KIDSNOTE_CLASS_ID ?? '1127255'
 
-type KidsNoteReport = {
-  id: number
-  type: string
-  title: string
-  content_text: string
-  writer_name: string
-  images: { url: string }[]
-  created: string
+type KidsNoteImage = {
+  original: string
+  large: string
+  small: string
 }
 
-type KidsNoteAlbum = {
+export type KidsNoteReport = {
+  id: number
+  type?: string
+  content: string
+  author: { name: string }
+  author_name: string
+  child_name: string
+  class_name: string
+  date_written: string
+  created: string
+  images: KidsNoteImage[]
+}
+
+export type KidsNoteAlbum = {
   id: number
   title: string
-  content_text: string
-  writer_name: string
-  images: { url: string }[]
+  content: string
+  author: { name: string }
+  author_name: string
   created: string
+  images: KidsNoteImage[]
 }
 
 type KidsNoteSession = {
@@ -41,17 +50,22 @@ async function login(): Promise<string> {
     throw new Error('KIDSNOTE_USERNAME, KIDSNOTE_PASSWORD 환경변수가 필요합니다')
   }
 
-  const res = await fetch(`${KIDSNOTE_BASE}/v1_2/login/`, {
+  const res = await fetch('https://www.kidsnote.com/login', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Referer': 'https://www.kidsnote.com/login',
+      'Accept-Language': 'ko-KR,ko;q=0.9',
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36',
+    },
+    body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
     redirect: 'manual',
   })
 
   const setCookies = res.headers.getSetCookie?.() ?? []
   const sessionCookie = setCookies
     .map((c) => c.split(';')[0])
-    .filter((c) => c.startsWith('sessionid=') || c.startsWith('csrftoken='))
+    .filter((c) => c.startsWith('sessionid='))
     .join('; ')
 
   if (!sessionCookie) {
@@ -60,7 +74,7 @@ async function login(): Promise<string> {
 
   cachedSession = {
     cookie: sessionCookie,
-    expiresAt: Date.now() + 30 * 60 * 1000, // 30분
+    expiresAt: Date.now() + 30 * 60 * 1000,
   }
 
   return sessionCookie
@@ -96,15 +110,14 @@ export async function fetchAlbums(childId: string): Promise<KidsNoteAlbum[]> {
   return data.results ?? []
 }
 
-const REPORT_TYPE_MAP: Record<string, string> = {
-  report: '알림장',
-  notice: '가정통신문',
-  album: '앨범',
-  menu: '식단표',
-  medication: '투약의뢰',
-  absent: '결석/귀가',
-}
-
-export function mapReportType(type: string): string {
-  return REPORT_TYPE_MAP[type] ?? type
+export function mapReportType(type: string | undefined): string {
+  const map: Record<string, string> = {
+    report: '알림장',
+    notice: '가정통신문',
+    album: '앨범',
+    menu: '식단표',
+    medication: '투약의뢰',
+    absent: '결석/귀가',
+  }
+  return map[type ?? ''] ?? '알림장'
 }
