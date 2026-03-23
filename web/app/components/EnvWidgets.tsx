@@ -57,7 +57,10 @@ type Props = {
   profile: string
 }
 
+// 이준이 탭 — 키즈노트에서는 환경 위젯 숨김
 export default function EnvWidgets({ profile }: Props) {
+  if (profile === 'ijun') return null
+
   const [weather, setWeather] = useState<WeatherCache | null>(null)
   const [dust, setDust] = useState<DustCache | null>(null)
   const [fuel, setFuel] = useState<FuelCache | null>(null)

@@ -35,6 +35,10 @@ export const CATEGORY_CONFIG: Record<string, { color: string; bg: string; label:
   '사회/국내': { color: '#DC2626', bg: '#FEF2F2', label: '사회' },
   '관광버스': { color: '#CA8A04', bg: '#FEFCE8', label: '관광버스' },
   '관광버스/국내': { color: '#CA8A04', bg: '#FEFCE8', label: '관광버스' },
+  '알림장': { color: '#F59E0B', bg: '#FFFBEB', label: '알림장' },
+  '식단표': { color: '#10B981', bg: '#ECFDF5', label: '식단표' },
+  '가정통신문': { color: '#8B5CF6', bg: '#F5F3FF', label: '가정통신문' },
+  '앨범': { color: '#EC4899', bg: '#FDF2F8', label: '앨범' },
 }
 
 export function getCategoryConfig(category: string) {
@@ -51,4 +55,5 @@ export const PROFILE_COLORS: Record<string, string> = {
   mom: '#BE185D',
   minhyuk: '#059669',
   junhyeok: '#7C3AED',
+  ijun: '#F59E0B',
 }
