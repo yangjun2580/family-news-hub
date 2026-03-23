@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { fetchReports, mapReportType } from '@/lib/kidsnote'
+import { fetchReports, fetchAlbums, mapReportType } from '@/lib/kidsnote'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,20 +33,41 @@ export async function GET() {
       return NextResponse.json({ entries: [], error: 'KIDSNOTE_CHILD_ID 미설정' })
     }
 
-    const reports = await fetchReports(childId)
+    // 알림장 + 앨범 병렬 조회
+    const [reports, albums] = await Promise.all([
+      fetchReports(childId),
+      fetchAlbums(childId).catch(() => []),
+    ])
+
+    const childName = process.env.KIDSNOTE_CHILD_NAME ?? '이준이'
+    const now = new Date().toISOString()
 
     // 3. Supabase에 캐시 저장 (upsert)
-    const rows = reports.map((r) => ({
+    const reportRows = reports.map((r) => ({
       kidsnote_id: String(r.id),
-      child_name: process.env.KIDSNOTE_CHILD_NAME ?? '이준이',
+      child_name: childName,
       report_type: mapReportType(r.type),
       title: r.title || mapReportType(r.type),
       content: r.content_text || '',
       author: r.writer_name || '',
       photos: (r.images ?? []).map((img) => img.url),
       report_date: r.created,
-      fetched_at: new Date().toISOString(),
+      fetched_at: now,
     }))
+
+    const albumRows = albums.map((a) => ({
+      kidsnote_id: `album_${a.id}`,
+      child_name: childName,
+      report_type: '앨범',
+      title: a.title || '앨범',
+      content: a.content_text || '',
+      author: a.writer_name || '',
+      photos: (a.images ?? []).map((img) => img.url),
+      report_date: a.created,
+      fetched_at: now,
+    }))
+
+    const rows = [...reportRows, ...albumRows]
 
     if (rows.length > 0) {
       await supabaseAdmin

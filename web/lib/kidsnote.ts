@@ -1,8 +1,21 @@
-const KIDSNOTE_BASE = 'https://www.kidsnote.com/api/v1_2'
+const KIDSNOTE_BASE = 'https://www.kidsnote.com/api'
+
+// 환경변수에서 센터/반 정보
+const CENTER_ID = process.env.KIDSNOTE_CENTER_ID ?? '66080'
+const CLASS_ID = process.env.KIDSNOTE_CLASS_ID ?? '1127255'
 
 type KidsNoteReport = {
   id: number
   type: string
+  title: string
+  content_text: string
+  writer_name: string
+  images: { url: string }[]
+  created: string
+}
+
+type KidsNoteAlbum = {
+  id: number
   title: string
   content_text: string
   writer_name: string
@@ -28,7 +41,7 @@ async function login(): Promise<string> {
     throw new Error('KIDSNOTE_USERNAME, KIDSNOTE_PASSWORD 환경변수가 필요합니다')
   }
 
-  const res = await fetch('https://www.kidsnote.com/api/v1_2/login/', {
+  const res = await fetch(`${KIDSNOTE_BASE}/v1_2/login/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
@@ -53,32 +66,32 @@ async function login(): Promise<string> {
   return sessionCookie
 }
 
-export async function fetchReports(childId: string): Promise<KidsNoteReport[]> {
+async function fetchWithRetry(url: string): Promise<Response> {
   const cookie = await login()
+  const res = await fetch(url, { headers: { Cookie: cookie } })
 
-  const res = await fetch(
-    `${KIDSNOTE_BASE}/children/${childId}/reports/?page_size=20&tz=Asia/Seoul&child=${childId}`,
-    {
-      headers: { Cookie: cookie },
-    }
-  )
-
-  if (!res.ok) {
-    // 세션 만료 시 재로그인
-    if (res.status === 401 || res.status === 403) {
-      cachedSession = null
-      const newCookie = await login()
-      const retry = await fetch(
-        `${KIDSNOTE_BASE}/children/${childId}/reports/?page_size=20&tz=Asia/Seoul&child=${childId}`,
-        { headers: { Cookie: newCookie } }
-      )
-      if (!retry.ok) throw new Error(`키즈노트 API 오류: ${retry.status}`)
-      const data = await retry.json()
-      return data.results ?? []
-    }
-    throw new Error(`키즈노트 API 오류: ${res.status}`)
+  if (res.status === 401 || res.status === 403) {
+    cachedSession = null
+    const newCookie = await login()
+    const retry = await fetch(url, { headers: { Cookie: newCookie } })
+    if (!retry.ok) throw new Error(`키즈노트 API 오류: ${retry.status}`)
+    return retry
   }
 
+  if (!res.ok) throw new Error(`키즈노트 API 오류: ${res.status}`)
+  return res
+}
+
+export async function fetchReports(childId: string): Promise<KidsNoteReport[]> {
+  const url = `${KIDSNOTE_BASE}/v1_2/children/${childId}/reports/?page_size=20&tz=Asia/Seoul&center_id=${CENTER_ID}&cls=${CLASS_ID}&child=${childId}`
+  const res = await fetchWithRetry(url)
+  const data = await res.json()
+  return data.results ?? []
+}
+
+export async function fetchAlbums(childId: string): Promise<KidsNoteAlbum[]> {
+  const url = `${KIDSNOTE_BASE}/v1_3/children/${childId}/albums/?tz=Asia/Seoul&page_size=12&center=${CENTER_ID}&cls=${CLASS_ID}&child=${childId}`
+  const res = await fetchWithRetry(url)
   const data = await res.json()
   return data.results ?? []
 }
