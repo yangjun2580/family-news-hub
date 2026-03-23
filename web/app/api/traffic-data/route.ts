@@ -6,17 +6,23 @@ const ITS_BASE = 'https://openapi.its.go.kr:9443'
 // 서울/경기 기본 bounding box
 type BBox = { minX: number; maxX: number; minY: number; maxY: number }
 
-// 인메모리 캐시 (5분 TTL)
+// 인메모리 캐시 (5분 TTL, 최대 50개)
+const MAX_CACHE = 50
 const cache = new Map<string, { data: unknown; expires: number }>()
 const CACHE_TTL = 5 * 60 * 1000
 
 function getCached<T>(key: string): T | null {
   const entry = cache.get(key)
   if (entry && entry.expires > Date.now()) return entry.data as T
+  cache.delete(key)
   return null
 }
 
 function setCache(key: string, data: unknown) {
+  if (cache.size >= MAX_CACHE) {
+    const oldest = cache.keys().next().value
+    if (oldest !== undefined) cache.delete(oldest)
+  }
   cache.set(key, { data, expires: Date.now() + CACHE_TTL })
 }
 

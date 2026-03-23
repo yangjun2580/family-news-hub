@@ -35,9 +35,18 @@ function SkeletonCard() {
   )
 }
 
-// 프로필별 캐시 (탭 전환 지연 감소)
+// 프로필별 캐시 (탭 전환 지연 감소, 최대 10개)
+const MAX_CACHE = 10
 const profileCache = new Map<string, { articles: Article[]; ts: number }>()
 const CACHE_TTL = 60000 // 1분
+
+function setCacheEntry(key: string, articles: Article[]) {
+  if (profileCache.size >= MAX_CACHE) {
+    const oldest = profileCache.keys().next().value
+    if (oldest !== undefined) profileCache.delete(oldest)
+  }
+  profileCache.set(key, { articles, ts: Date.now() })
+}
 
 export default function ArticleFeed({ profile, initialArticles, onNewArticle }: Props) {
   // 2일 이내 기사만 필터
@@ -58,7 +67,7 @@ export default function ArticleFeed({ profile, initialArticles, onNewArticle }: 
     if (isInitialMount.current) {
       isInitialMount.current = false
       if (profile === 'all' && filtered.length > 0) {
-        profileCache.set('all', { articles: filtered, ts: Date.now() })
+        setCacheEntry('all', filtered)
         setFetchedOnce(true)
         return
       }
@@ -102,7 +111,7 @@ export default function ArticleFeed({ profile, initialArticles, onNewArticle }: 
       const result = data ?? []
       setArticles(result)
       setHasMore(result.length === PAGE_SIZE)
-      profileCache.set(profile, { articles: result, ts: Date.now() })
+      setCacheEntry(profile, result)
       setLoading(false)
       setFetchedOnce(true)
     }

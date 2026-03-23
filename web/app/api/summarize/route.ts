@@ -98,6 +98,10 @@ async function summarizeArticle(
     signal: AbortSignal.timeout(30000),
   })
 
+  if (!res.ok) {
+    console.error('LLM API error:', res.status, await res.text().catch(() => ''))
+    return ''
+  }
   const data = await res.json()
   let content = data?.choices?.[0]?.message?.content?.trim() || ''
 
