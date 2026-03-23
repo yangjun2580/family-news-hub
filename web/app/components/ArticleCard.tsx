@@ -78,16 +78,12 @@ export default function ArticleCard({ article, isNew }: Props) {
         {displayTitle}
       </h3>
 
-      {/* Summary — 최대 6~7줄 표시 */}
+      {/* Summary — 전체 표시 */}
       {body && (
         <p
           className="mb-3 text-xs leading-relaxed"
           style={{
             color: 'var(--text-secondary)',
-            display: '-webkit-box',
-            WebkitLineClamp: 7,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
             whiteSpace: 'pre-line',
           }}
         >
