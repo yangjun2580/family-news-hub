@@ -62,7 +62,7 @@ export default function ProfileTabs({ active, onChange }: Props) {
                 ? { backgroundColor: color, color: '#fff', borderColor: color }
                 : { borderColor: 'var(--border)', color: 'var(--text-secondary)' }
             }
-            className="flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-all duration-200"
+            className="flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium transition-all duration-200 min-h-[44px]"
           >
             <span
               className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm"

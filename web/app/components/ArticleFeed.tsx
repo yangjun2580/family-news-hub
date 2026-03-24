@@ -170,7 +170,7 @@ export default function ArticleFeed({ profile, initialArticles, onNewArticle }: 
       {!loading && hasMore && (
         <button
           onClick={loadMore}
-          className="mt-2 w-full rounded-xl py-3 text-sm font-medium transition-all duration-200 active:scale-[0.98]"
+          className="mt-2 w-full rounded-xl py-3.5 text-sm font-medium transition-all duration-200 active:scale-[0.98] min-h-[48px]"
           style={{
             background: 'var(--surface)',
             color: 'var(--text-secondary)',

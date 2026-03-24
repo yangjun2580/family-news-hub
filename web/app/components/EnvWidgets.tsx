@@ -53,6 +53,28 @@ function SkeletonWidget() {
   )
 }
 
+function TrafficWidget() {
+  return (
+    <div
+      className="flex min-w-[160px] flex-col gap-1.5 rounded-xl p-3"
+      style={{ background: 'var(--surface)', boxShadow: 'var(--shadow)' }}
+    >
+      <p className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
+        교통 · 실시간
+      </p>
+      <div className="flex items-center gap-1.5">
+        <span className="text-lg">🚗</span>
+        <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+          준비 중
+        </span>
+      </div>
+      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+        ITS 연동 예정
+      </p>
+    </div>
+  )
+}
+
 type Props = {
   profile: string
 }
@@ -202,6 +224,11 @@ export default function EnvWidgets({ profile }: Props) {
             </div>
           </div>
         )
+      )}
+
+      {/* Traffic - 아빠 탭 전용: ITS API 연동 대기 중 */}
+      {showFuel && (
+        <TrafficWidget />
       )}
     </div>
   )

@@ -97,7 +97,7 @@ export default function ArticleCard({ article, isNew }: Props) {
           href={articleUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="shrink-0 rounded px-1.5 py-0.5 text-xs transition-colors"
+          className="shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition-colors min-h-[44px] flex items-center"
           style={{
             color: cat.color,
             backgroundColor: `${cat.bg}99`,
