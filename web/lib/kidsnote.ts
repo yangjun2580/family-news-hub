@@ -1,3 +1,5 @@
+import https from 'https'
+
 const KIDSNOTE_BASE = 'https://www.kidsnote.com/api'
 
 const CENTER_ID = process.env.KIDSNOTE_CENTER_ID ?? '66080'
@@ -52,27 +54,40 @@ async function login(): Promise<string> {
     throw new Error('KIDSNOTE_USERNAME, KIDSNOTE_PASSWORD 환경변수가 필요합니다')
   }
 
-  const res = await fetch('https://www.kidsnote.com/login', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Referer': 'https://www.kidsnote.com/login',
-      'Accept-Language': 'ko-KR,ko;q=0.9',
-      'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36',
-    },
-    body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
-    redirect: 'manual',
+  const body = `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
+
+  const sessionCookie = await new Promise<string>((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: 'www.kidsnote.com',
+        path: '/login',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': Buffer.byteLength(body),
+          'Referer': 'https://www.kidsnote.com/login',
+          'Accept-Language': 'ko-KR,ko;q=0.9',
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36',
+        },
+      },
+      (res) => {
+        const cookies: string[] = (res.headers['set-cookie'] ?? []) as string[]
+        const cookie = cookies
+          .map((c) => c.split(';')[0])
+          .filter((c) => c.startsWith('sessionid='))
+          .join('; ')
+        res.resume()
+        if (!cookie) {
+          reject(new Error('키즈노트 로그인 실패: 세션 쿠키를 받지 못했습니다'))
+        } else {
+          resolve(cookie)
+        }
+      },
+    )
+    req.on('error', reject)
+    req.write(body)
+    req.end()
   })
-
-  const setCookies = res.headers.getSetCookie?.() ?? []
-  const sessionCookie = setCookies
-    .map((c) => c.split(';')[0])
-    .filter((c) => c.startsWith('sessionid='))
-    .join('; ')
-
-  if (!sessionCookie) {
-    throw new Error('키즈노트 로그인 실패: 세션 쿠키를 받지 못했습니다')
-  }
 
   cachedSession = {
     cookie: sessionCookie,

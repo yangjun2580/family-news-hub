@@ -1,6 +1,27 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
+
+async function savePhotoToGallery(proxyUrl: string, filename: string) {
+  const res = await fetch(proxyUrl)
+  const blob = await res.blob()
+  const file = new File([blob], filename, { type: blob.type || 'image/jpeg' })
+
+  // 모바일: Web Share API로 네이티브 사진앱/갤러리에 저장
+  if (navigator.canShare?.({ files: [file] })) {
+    await navigator.share({ files: [file], title: '이준이 사진' })
+    return
+  }
+
+  // 데스크탑 fallback: 파일 다운로드
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+import { createPortal } from 'react-dom'
 import { KidsNoteEntry } from '@/lib/supabase'
 import { timeAgo, getCategoryConfig } from '@/lib/utils'
 
@@ -20,6 +41,8 @@ function Lightbox({
 
   // 원본 URL (large_resize → large 또는 original)
   const fullUrl = photos[idx].replace('/img_640_resize.jpg', '/img_l.jpg')
+  const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(fullUrl)}`
+  const filename = fullUrl.split('/').pop()?.split('?')[0] ?? 'photo.jpg'
 
   const prev = useCallback(() => setIdx((i) => Math.max(0, i - 1)), [])
   const next = useCallback(() => setIdx((i) => Math.min(photos.length - 1, i + 1)), [photos.length])
@@ -54,59 +77,49 @@ function Lightbox({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.9)' }}
+      className="fixed inset-0 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.95)', zIndex: 9999 }}
       onClick={onClose}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
-      {/* 상단 카운터 + 닫기 */}
-      <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 pt-[env(safe-area-inset-top,12px)] pb-2 z-10">
-        <span className="text-sm font-medium text-white/80">
+      {/* 상단 버튼 — 닫기(우) + 다운로드(좌) */}
+      <button
+        onClick={onClose}
+        className="absolute top-3 right-3 flex h-7 w-7 items-center justify-center rounded-full"
+        style={{ background: 'rgba(0,0,0,0.5)', zIndex: 10000 }}
+      >
+        <svg width="14" height="14" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
+          <path d="M12 2L2 12M2 2l10 10" />
+        </svg>
+      </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); savePhotoToGallery(proxyUrl, filename) }}
+        className="absolute top-3 left-3 flex h-7 w-7 items-center justify-center rounded-full"
+        style={{ background: 'rgba(0,0,0,0.5)', zIndex: 10000 }}
+      >
+        <svg width="14" height="14" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M7 2v8M4 7l3 3 3-3M2 12h10" />
+        </svg>
+      </button>
+
+      {/* 카운터 — 하단 중앙 */}
+      <div className="absolute bottom-4 left-0 right-0 text-center" style={{ zIndex: 10000 }}>
+        <span className="rounded-full px-3 py-1 text-xs text-white/70" style={{ background: 'rgba(0,0,0,0.4)' }}>
           {idx + 1} / {photos.length}
         </span>
-        <button
-          onClick={onClose}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-white/80 active:bg-white/10"
-        >
-          <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </button>
       </div>
 
-      {/* 사진 */}
+      {/* 사진 — 프록시 URL 사용: 길게 누르기 → iOS "사진에 저장" / Android "이미지 저장" */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={fullUrl}
+        src={proxyUrl}
         alt={`사진 ${idx + 1}`}
-        className="max-h-[85vh] max-w-[95vw] object-contain select-none"
+        className="max-h-[90vh] max-w-[100vw] object-contain"
         onClick={(e) => e.stopPropagation()}
         draggable={false}
       />
-
-      {/* 좌우 버튼 (데스크탑) */}
-      {idx > 0 && (
-        <button
-          className="absolute left-2 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white active:bg-black/60"
-          onClick={(e) => { e.stopPropagation(); prev() }}
-        >
-          <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M13 4l-6 6 6 6" />
-          </svg>
-        </button>
-      )}
-      {idx < photos.length - 1 && (
-        <button
-          className="absolute right-2 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white active:bg-black/60"
-          onClick={(e) => { e.stopPropagation(); next() }}
-        >
-          <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M7 4l6 6-6 6" />
-          </svg>
-        </button>
-      )}
     </div>
   )
 }
@@ -176,12 +189,13 @@ function PhotoGallery({ photos }: { photos: string[] }) {
         )}
       </div>
 
-      {lightboxIdx !== null && (
+      {lightboxIdx !== null && createPortal(
         <Lightbox
           photos={photos}
           startIndex={lightboxIdx}
           onClose={() => setLightboxIdx(null)}
-        />
+        />,
+        document.body
       )}
     </>
   )

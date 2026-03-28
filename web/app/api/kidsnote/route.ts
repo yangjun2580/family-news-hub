@@ -53,6 +53,7 @@ export async function GET() {
     }))
 
     const entries = [...reportRows, ...albumRows]
+      .filter((e) => (e.content.split('\n').length >= 5 || e.content.length >= 200) && !e.author.includes('엄마'))
       .sort((a, b) => new Date(b.report_date).getTime() - new Date(a.report_date).getTime())
 
     memCache = { entries, ts: Date.now() }

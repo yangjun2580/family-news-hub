@@ -53,6 +53,15 @@ function SkeletonWidget() {
   )
 }
 
+type NearbyStation = {
+  name: string
+  price: number
+  distance: number
+  brand: string
+  lat: number
+  lon: number
+}
+
 type Props = {
   profile: string
 }
@@ -61,6 +70,7 @@ export default function EnvWidgets({ profile }: Props) {
   const [weather, setWeather] = useState<WeatherCache | null>(null)
   const [dust, setDust] = useState<DustCache | null>(null)
   const [fuel, setFuel] = useState<FuelCache | null>(null)
+  const [nearbyStations, setNearbyStations] = useState<NearbyStation[]>([])
   const [loading, setLoading] = useState(true)
   const [locationLabel, setLocationLabel] = useState<string>('내 위치')
 
@@ -74,6 +84,7 @@ export default function EnvWidgets({ profile }: Props) {
         if (data.weather) setWeather(data.weather)
         if (data.dust) setDust(data.dust)
         if (data.fuel) setFuel(data.fuel)
+        if (data.nearbyStations?.length) setNearbyStations(data.nearbyStations)
         if (data.locationName) setLocationLabel(`현재 위치(${data.locationName})`)
         // 누락된 항목은 DB fallback
         if (!data.weather || !data.dust || !data.fuel) {
@@ -215,6 +226,51 @@ export default function EnvWidgets({ profile }: Props) {
                 </div>
               </div>
             </div>
+          </div>
+        )
+      )}
+
+      {/* 근처 싼 주유소 TOP 5 - 아빠 탭에서만 */}
+      {showFuel && (
+        loading ? <SkeletonWidget /> : (
+          <div
+            className="flex w-max flex-col gap-1.5 rounded-xl p-3"
+            style={{ background: 'var(--surface)', boxShadow: 'var(--shadow)' }}
+          >
+            <p className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
+              ⛽ 근처 싼 주유소 TOP 5
+            </p>
+            {nearbyStations.length === 0 ? (
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>위치 승인 후 표시됩니다</p>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {nearbyStations.map((s, i) => {
+                  const tmapUrl = `tmap://route?rGoName=${encodeURIComponent(s.name)}&rGoX=${s.lon}&rGoY=${s.lat}`
+                  const dist = s.distance >= 1000 ? `${(s.distance / 1000).toFixed(1)}km` : `${s.distance}m`
+                  return (
+                    <div key={i} className="flex items-center gap-1.5" style={{ whiteSpace: 'nowrap' }}>
+                      <span className="shrink-0 text-xs font-bold w-3" style={{ color: 'var(--text-muted)' }}>{i + 1}</span>
+                      <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{s.name}</span>
+                      <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        {s.price.toLocaleString()}원
+                      </span>
+                      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{dist}</span>
+                      <a
+                        href={tmapUrl}
+                        onClick={(e) => e.stopPropagation()}
+                        className="shrink-0 flex h-6 w-6 items-center justify-center rounded-md"
+                        style={{ background: '#0066FF' }}
+                        title="Tmap으로 길찾기"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
+                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                        </svg>
+                      </a>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )
       )}

@@ -5,7 +5,7 @@
 
 ROUNDS=${1:-10}
 BATCH=${2:-5}
-API_URL="http://localhost:37777/api/summarize"
+API_URL="http://localhost:3020/api/summarize"
 
 echo "=== 배치 기사 요약 시작 ==="
 echo "반복: ${ROUNDS}회, 배치: ${BATCH}개씩"
